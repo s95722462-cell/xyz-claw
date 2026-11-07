@@ -24,8 +24,15 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14p
 header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
 h1{font-family:var(--f-fun);font-size:30px;margin:0;font-weight:400;color:var(--cab);letter-spacing:.02em;text-wrap:balance}
 .sub{color:var(--muted);font-size:13px}
-.top{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
-@media (max-width:900px){.top{grid-template-columns:minmax(0,1fr)}}
+html{touch-action:manipulation}
+.game{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:900px){.game{grid-template-columns:minmax(0,1fr)}.stage{min-height:clamp(300px,64vw,560px)!important}.wrap{gap:10px;padding-block:10px 24px}h1{font-size:24px}.sub{display:none}}
+.panel{display:grid;gap:10px}
+.panel,.panel *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.ctrlrow{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+.row2{display:grid;grid-template-columns:1fr auto;gap:8px}
+.small{font:600 13px var(--f-ui);border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--panel2);color:var(--ink);cursor:pointer;touch-action:manipulation}
+.note a{color:var(--cab)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
 .card h2{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
 .stage{position:relative;padding:0;overflow:hidden;min-height:480px;background:var(--stage);border:0}
@@ -46,11 +53,12 @@ h1{font-family:var(--f-fun);font-size:30px;margin:0;font-weight:400;color:var(--
 .score span{font-size:11px;color:var(--muted)}
 .coin{font-family:var(--f-fun);font-size:18px;border:0;border-radius:12px;padding:10px;background:var(--accent);color:#2b1b24;cursor:pointer;box-shadow:0 4px 0 color-mix(in srgb,var(--accent) 60%,#000)}
 .coin:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--accent) 60%,#000)}
-.stick{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px);gap:6px;justify-content:center}
+.stick{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:5px}
+.dir,.grab{touch-action:none}.coin{touch-action:manipulation}
 .dir{border:0;border-radius:50%;background:var(--panel2);color:var(--ink);font-size:22px;cursor:pointer;user-select:none;touch-action:none;box-shadow:inset 0 -4px 0 var(--line)}
 .dir.held{background:var(--cab);color:#fff;box-shadow:none}
 .knob{border-radius:50%;background:radial-gradient(circle at 38% 32%,#ff9cbd,var(--cab) 45%,var(--cab2));box-shadow:0 4px 8px #0004}
-.grab{font-family:var(--f-fun);font-size:30px;border:0;border-radius:50%;width:150px;height:150px;justify-self:center;background:radial-gradient(circle at 40% 35%,#ff8f84,var(--bad));color:#fff;cursor:pointer;box-shadow:0 8px 0 color-mix(in srgb,var(--bad) 55%,#000)}
+.grab{font-family:var(--f-fun);font-size:30px;border:0;border-radius:50%;width:min(132px,100%);aspect-ratio:1;height:auto;justify-self:center;background:radial-gradient(circle at 40% 35%,#ff8f84,var(--bad));color:#fff;cursor:pointer;box-shadow:0 8px 0 color-mix(in srgb,var(--bad) 55%,#000)}
 .grab:active{transform:translateY(5px);box-shadow:0 3px 0 color-mix(in srgb,var(--bad) 55%,#000)}
 .grab:disabled{filter:grayscale(.8) opacity(.6);cursor:not-allowed}
 .hint{font-size:12px;color:var(--muted);text-align:center;min-height:18px}
@@ -88,7 +96,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--muted);letter-spacing:
     <span class="sub">곰돌이·토끼·오리·로봇·비치볼·선물 상자… 집게는 학습 랙 XYZ 래더(7개)가 그대로 움직입니다</span>
   </header>
 
-  <div class="top">
+  <div class="game">
     <div class="card stage">
       <div id="view" aria-label="3D 인형 뽑기 기계 (드래그로 둘러보기)"></div>
       <div class="hud"><span class="pos" id="pos">X 0.0 Y 0.0 Z 0.0</span></div>
@@ -97,47 +105,27 @@ details summary{cursor:pointer;font-size:12px;color:var(--muted);letter-spacing:
       <div class="toast" id="toast"></div>
     </div>
 
-    <div class="card ctrl" aria-label="조작판">
+    <div class="card panel" aria-label="조작판">
       <div class="score">
         <div><b id="cr">0</b><span>남은 판</span></div>
         <div><b id="win">0</b><span>뽑은 인형</span></div>
         <div><b id="tm">-</b><span>남은 초</span></div>
       </div>
       <div class="timer"><i id="tbar"></i></div>
+      <div class="ctrlrow">
+        <div class="stick" role="group" aria-label="조이스틱">
+          <span></span><button class="dir" data-mom="M3023" aria-label="뒤로">▲</button><span></span>
+          <button class="dir" data-mom="M3021" aria-label="왼쪽">◀</button><span class="knob"></span><button class="dir" data-mom="M3020" aria-label="오른쪽">▶</button>
+          <span></span><button class="dir" data-mom="M3022" aria-label="앞으로">▼</button><span></span>
+        </div>
+        <button class="grab" id="grab" disabled>뽑기!</button>
+      </div>
+      <div class="hint" id="hint">방향키로 조준 · 스페이스 = 뽑기</div>
+      <div class="row2"><button class="coin" id="coin">동전 넣기 (+1판)</button><button class="small" id="refill">인형 채우기</button></div>
       <div class="gotlist" id="gotlist">아직 뽑은 게 없어요</div>
-      <button class="coin" id="coin">동전 넣기 (+1판)</button>
-      <div class="stick" role="group" aria-label="조이스틱">
-        <span></span><button class="dir" data-mom="M3023" aria-label="뒤로">▲</button><span></span>
-        <button class="dir" data-mom="M3021" aria-label="왼쪽">◀</button><span class="knob"></span><button class="dir" data-mom="M3020" aria-label="오른쪽">▶</button>
-        <span></span><button class="dir" data-mom="M3022" aria-label="앞으로">▼</button><span></span>
-      </div>
-      <div class="hint" id="hint">키보드 방향키로도 움직입니다 · 스페이스 = 뽑기</div>
-      <button class="grab" id="grab" disabled>뽑기!</button>
     </div>
   </div>
-
-  <div class="bottom">
-    <div class="card">
-      <h2>기계 상태 (래더 디바이스)</h2>
-      <div class="lamps" id="lamps"></div>
-      <div class="steps" id="steps"></div>
-      <div class="al" id="al"></div>
-      <div class="mini">
-        <button id="reset">에러 리셋 M3011</button>
-        <button id="home">원점 복귀 M3014</button>
-        <button class="r" id="estop" aria-pressed="false">비상 정지 X0</button>
-        <button id="refill">인형 다시 채우기</button>
-      </div>
-    </div>
-    <div class="card">
-      <details>
-        <summary>래더 원문 보기 (실행 중 · 초록 = ON)</summary>
-        <div class="tabs" id="tabs"></div>
-        <div class="il" id="il"></div>
-      </details>
-      <p class="note">뽑기를 누르면 점 목록을 P1 = 지금 X·Y 에서 쌓인 상품 높이까지 내려가기(닿으면 멈추는 진짜 기계처럼 Z 목표를 계산), P2 = 출구(15,15) 위 Z 5mm 로 채우고 자동 운전(M3016·M3012)을 겁니다. 래더 자동 단계 40(머묾)에서 P1 이면 집게를 오므리고 P2 면 벌립니다. 집게 흔들림은 래더 축의 가속도로 계산한 진자 운동입니다. 소리는 X·Y·Z 축 속도에서 만듭니다.</p>
-    </div>
-  </div>
+  <p class="note">집게는 학습 랙 XYZ 래더 7개가 브라우저 안에서 그대로 움직입니다. 래더 신호·알람을 자세히 보려면 <a href="https://s95722462-cell.github.io/xyz-claw/gantry.html" target="_blank" rel="noopener">래더 시뮬레이터</a>.</p>
 </div>
 
 <script>
@@ -309,7 +297,7 @@ function build3d() {
   // 받침·앞 패널·조작대
   box(XB - XA + 16, 76, ZB - ZA + 16, M.cab, CX, -42, CZ);
   box(XB - XA + 18, 5, ZB - ZA + 18, M.cab2, CX, -3.6, CZ);
-  const ptex = canvasTex(T, 1024, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ff6f9f'); gr.addColorStop(1, '#c42a62'); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = '#ffd04d'; g.font = 'bold 110px Jua, sans-serif'; g.textAlign = 'center'; g.fillText('GEN CLAW', w / 2, 150); g.fillStyle = '#fff'; g.font = '44px Jua, sans-serif'; g.fillText('한 판 500원 · 학습 랙 XYZ 래더 구동', w / 2, 215); });
+  const ptex = canvasTex(T, 1024, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ff6f9f'); gr.addColorStop(1, '#c42a62'); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = '#ffd04d'; g.font = 'bold 110px Jua, sans-serif'; g.textAlign = 'center'; g.fillText('ALF CLAW', w / 2, 150); g.fillStyle = '#fff'; g.font = '44px Jua, sans-serif'; g.fillText('한 판 500원 · 학습 랙 XYZ 래더 구동', w / 2, 215); });
   const fp = new T.Mesh(new T.PlaneGeometry(XB - XA + 16, 50), std({ map: ptex, roughness: 0.4 })); fp.position.set(CX, -55, ZB + 8.1); scene.add(fp);
   const deck = new T.Group(); deck.position.set(0, -14, ZB + 8); scene.add(deck);
   const dk = box(XB - XA + 16, 7, 34, M.cab2, CX, 0, 15, true, deck); dk.rotation.x = 0.18;
@@ -596,15 +584,12 @@ function loop(now) {
   const el = Math.min(0.1, (now - last) / 1000); last = now;
   const n = Math.round(el / DT);
   try { for (let i = 0; i < n; i++) step(); } catch (e) { toast('래더 오류: ' + e.message); throw e; }
-  game(el); render(el); ui();
+  guard(el); game(el); render(el); ui();
   requestAnimationFrame(loop);
 }
 
 // ───────── 화면 ─────────
 const $ = id => document.getElementById(id);
-const LAMPS = [['M3005', '운전 가능'], ['Y61', '서보 ON'], ['M3040', '원점 완료'], ['M3101', '원점 복귀 중', 'amb'], ['M3064', '수동(조이스틱)'], ['M3060', '자동(뽑는 중)'], ['M3071', 'Z 내려감 경고', 'red'], ['M3075', '중알람', 'red'], ['X6C', 'X BUSY', 'amb']];
-$('lamps').innerHTML = LAMPS.map(([d, t, c]) => `<div class="lamp ${c || ''}" data-d="${d}" title="${d}">${t}</div>`).join('');
-const ALM = { 1400: 'X축 서보 에러', 1401: 'Y축 서보 에러', 1402: 'Z축 서보 에러', 1403: '비상 정지', 1404: '도어 열림', 1410: 'X 기동 무응답', 1411: 'Y 기동 무응답', 1412: 'Z 기동 무응답', 1420: 'X 이동 시간 초과', 1421: 'Y 이동 시간 초과', 1422: 'Z 이동 시간 초과', 1423: '원점 복귀 시간 초과' };
 const AUTO_T = { 0: '대기', 10: 'Z 올림', 11: 'Z 올림', 20: 'XY 이동', 21: 'XY 이동', 30: 'Z 내림', 31: 'Z 내림', 40: '머묾(집게)', 50: 'Z 올림', 51: 'Z 올림', 60: '다음 점' };
 const fD = n => { fbuf.setInt16(0, D[n], true); fbuf.setInt16(2, D[n + 1], true); return fbuf.getFloat32(0, true); };
 const sD = (n, x) => { fbuf.setFloat32(0, x, true); D[n] = fbuf.getInt16(0, true); D[n + 1] = fbuf.getInt16(2, true); };
@@ -623,28 +608,25 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { if (KEYMAP[e.key]) setB(KEYMAP[e.key], 0); });
 $('coin').addEventListener('click', () => { credits++; sfx.coin(); say(pick(LINES.coin)); });
 $('grab').addEventListener('click', () => startGrab(false));
-$('reset').addEventListener('click', () => { sfx.click(); pulse('M3011', 200); });
-$('home').addEventListener('click', () => { sfx.click(); setB('M3016', 0); pulse('M3014'); phase = 'homing'; });
-$('estop').addEventListener('click', e => { const p = getB('X0'); setB('X0', !p); e.currentTarget.setAttribute('aria-pressed', p ? 'true' : 'false'); });
 $('refill').addEventListener('click', () => { sfx.click(); refill(); });
 $('snd').addEventListener('click', e => { SND.on = !SND.on; e.currentTarget.setAttribute('aria-pressed', SND.on); if (SND.master) SND.master.gain.setTargetAtTime(SND.on ? 0.8 : 0, SND.ac.currentTime, 0.05); if (!SND.on && 'speechSynthesis' in window) speechSynthesis.cancel(); });
 $('mus').addEventListener('click', e => { SND.music = !SND.music; e.currentTarget.setAttribute('aria-pressed', SND.music); if (SND.mus) SND.mus.gain.setTargetAtTime(SND.music ? 0.5 : 0, SND.ac.currentTime, 0.05); });
 $('voc').addEventListener('click', e => { SND.voice = !SND.voice; e.currentTarget.setAttribute('aria-pressed', SND.voice); if (!SND.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); });
-let tab = 0, ilT = 0;
-$('tabs').innerHTML = PROGRAMS.map((p, i) => `<button data-i="${i}" aria-pressed="${i === 0}">${p.name}</button>`).join('');
-$('tabs').addEventListener('click', e => { const i = e.target.dataset.i; if (i == null) return; tab = +i; [...$('tabs').children].forEach((b, j) => b.setAttribute('aria-pressed', j === tab)); ilT = 0; });
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-function ilDraw() {
-  if (!document.querySelector('details').open) return;
-  const now = performance.now(); if (now - ilT < 300) return; ilT = now;
-  const p = PROGRAMS[tab], st = new Map(p.ins.map(it => [it.li, it]));
-  $('il').innerHTML = p.lines.map((raw, li) => {
-    const s = raw.trim(); if (!s) return '';
-    if (s.startsWith('#') || s.startsWith('//')) return `<span class="c">${esc(raw)}</span>`;
-    const it = st.get(li); let html = esc(raw);
-    if (it && it.r) html = html.replace(esc(it.a[0]), `<span class="${it.r.get() ? 'on' : 'op'}">${esc(it.a[0])}</span>`);
-    return html;
-  }).join('\n');
+// 휴대폰: 두 번 탭 확대·길게 눌러 메뉴 막기
+addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.querySelector('.panel').addEventListener('contextmenu', e => e.preventDefault());
+// 게임 중 에러 없게: 끝 4mm 앞에서 JOG 끊기, 알람이 나면 스스로 리셋하고 필요하면 원점 복귀
+const SOFT = [[3, 216], [3, 156]];
+let healT = 0;
+function guard(dt) {
+  [['M3020', 0, 1], ['M3021', 0, -1], ['M3022', 1, 1], ['M3023', 1, -1]].forEach(([d, ax, dir]) => {
+    if (!getB(d)) return; const p = AX[ax].pos; if ((dir > 0 && p >= SOFT[ax][1]) || (dir < 0 && p <= SOFT[ax][0])) setB(d, 0);
+  });
+  healT -= dt;
+  if (getB('M3075') && healT <= 0) { healT = 0.6; pulse('M3011', 200); if (phase === 'run') { setB('M3016', 0); phase = 'heal'; } }
+  if (phase === 'heal' && !getB('M3075') && healT <= 0) { phase = 'homing'; pulse('M3014', 200); }
+  if (phase !== 'homing' && phase !== 'boot' && phase !== 'heal' && !getB('M3040') && !getB('M3101') && !getB('M3075')) { setB('M3016', 0); phase = 'homing'; pulse('M3014', 200); }
 }
 function ui() {
   if (phase === 'homing' && getB('M3040') && !getB('M3101')) phase = credits > 0 ? 'aim' : 'idle';
@@ -654,13 +636,8 @@ function ui() {
   $('tbar').style.width = (phase === 'aim' ? timeLeft / 20 * 100 : 0) + '%'; $('tbar').classList.toggle('hurry', phase === 'aim' && timeLeft <= 5);
   const gl = got.length ? '획득: ' + Object.entries(got.reduce((m, n) => (m[n] = (m[n] || 0) + 1, m), {})).map(([n, c]) => c > 1 ? `${n} ×${c}` : n).join(', ') : '아직 뽑은 게 없어요'; if ($('gotlist').textContent !== gl) $('gotlist').textContent = gl;
   $('grab').disabled = phase !== 'aim';
-  $('hint').textContent = phase === 'homing' || phase === 'boot' ? '집게가 원점(출구 위)으로 가는 중…' : phase === 'run' ? '집게가 뽑는 중! (래더 자동 운전)' : phase === 'idle' ? '동전을 넣으세요' : '방향키·조이스틱으로 조준 · 스페이스 = 뽑기';
+  $('hint').textContent = phase === 'homing' || phase === 'boot' || phase === 'heal' ? '집게가 원점(출구 위)으로 가는 중…' : phase === 'run' ? '집게가 뽑는 중! (래더 자동 운전)' : phase === 'idle' ? '동전을 넣으세요' : '조이스틱(방향키)으로 조준 → 뽑기(스페이스)';
   $('pos').textContent = `X ${AX[0].pos.toFixed(1)}  Y ${AX[1].pos.toFixed(1)}  Z ${AX[2].pos.toFixed(1)}`;
-  document.querySelectorAll('.lamp').forEach(l => l.classList.toggle('on', !!bitRef(l.dataset.d).get()));
-  $('steps').textContent = `자동 단계 D3170 = ${D[3170]} ${AUTO_T[D[3170]] || ''} · 점 D3160 = ${D[3160]} · 원점 단계 D3190 = ${D[3190]} · scan ${scans.toLocaleString()}`;
-  const on = Object.keys(ALM).filter(n => getB('M' + n));
-  $('al').textContent = on.length ? '알람: ' + on.map(n => `M${n} ${ALM[n]}`).join(', ') + ' → 원인을 없애고 에러 리셋' : '';
-  ilDraw();
 }
 build3d(); refill();
 setTimeout(() => { D[3164] = 1500; pulse('M3014', 200); phase = 'homing'; }, 400);
