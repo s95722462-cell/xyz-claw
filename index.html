@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>XYZ 인형 뽑기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* 레이아웃: 왼쪽 3D 뽑기 기계 + 오른쪽 조작판(동전·조이스틱·뽑기), 아래 기계 상태·래더 원문 */
+:root{
+  --bg:#fdf3f6; --panel:#ffffff; --panel2:#fbeef2; --ink:#2b1b24; --muted:#7b6470; --line:#efd3dd;
+  --cab:#e8457c; --cab2:#b8295a; --accent:#ffb400; --go:#1fb46a; --bad:#e23b2e; --off:#e6d6dc; --stage:#2a1830;
+  --f-fun:"Jua","IBM Plex Sans KR","Malgun Gothic",sans-serif;
+  --f-ui:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1a1016; --panel:#24161e; --panel2:#2d1c26; --ink:#f7e8ee; --muted:#bfa3b0; --line:#43293a;
+  --cab:#ff5c93; --cab2:#c23a6c; --accent:#ffc533; --go:#33d07f; --bad:#ff6b5e; --off:#4a3240; --stage:#120a10; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1a1016; --panel:#24161e; --panel2:#2d1c26; --ink:#f7e8ee; --muted:#bfa3b0; --line:#43293a;
+  --cab:#ff5c93; --cab2:#c23a6c; --accent:#ffc533; --go:#33d07f; --bad:#ff6b5e; --off:#4a3240; --stage:#120a10; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-block:16px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+h1{font-family:var(--f-fun);font-size:30px;margin:0;font-weight:400;color:var(--cab);letter-spacing:.02em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.top{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+@media (max-width:900px){.top{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.card h2{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.stage{position:relative;padding:0;overflow:hidden;min-height:480px;background:var(--stage);border:0}
+#view{position:absolute;inset:0;cursor:grab;touch-action:none}
+#view canvas{display:block;width:100%!important;height:100%!important}
+.hud{position:absolute;left:12px;bottom:10px;display:flex;gap:8px;align-items:center;pointer-events:none}
+.hud .pos{font:12px var(--f-num);color:#f3d9e4;background:#0006;border-radius:6px;padding:2px 8px}
+.snds{position:absolute;right:12px;top:10px;display:flex;gap:6px}
+.snd{font:600 12px var(--f-ui);border:0;border-radius:999px;padding:5px 12px;background:#0007;color:#fff;cursor:pointer}
+.snd[aria-pressed="false"]{opacity:.5;text-decoration:line-through}
+.drag{position:absolute;right:12px;bottom:10px;font-size:11px;color:#f3d9e4aa;pointer-events:none}
+.toast{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(.9);font-family:var(--f-fun);font-size:38px;color:#fff;background:var(--cab);border:4px solid var(--accent);border-radius:18px;padding:6px 24px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;box-shadow:0 10px 30px #0006}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.ctrl{display:grid;gap:12px;align-content:start}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.score div{background:var(--panel2);border-radius:10px;padding:6px 4px}
+.score b{display:block;font:600 24px var(--f-num);font-variant-numeric:tabular-nums}
+.score span{font-size:11px;color:var(--muted)}
+.coin{font-family:var(--f-fun);font-size:18px;border:0;border-radius:12px;padding:10px;background:var(--accent);color:#2b1b24;cursor:pointer;box-shadow:0 4px 0 color-mix(in srgb,var(--accent) 60%,#000)}
+.coin:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--accent) 60%,#000)}
+.stick{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px);gap:6px;justify-content:center}
+.dir{border:0;border-radius:50%;background:var(--panel2);color:var(--ink);font-size:22px;cursor:pointer;user-select:none;touch-action:none;box-shadow:inset 0 -4px 0 var(--line)}
+.dir.held{background:var(--cab);color:#fff;box-shadow:none}
+.knob{border-radius:50%;background:radial-gradient(circle at 38% 32%,#ff9cbd,var(--cab) 45%,var(--cab2));box-shadow:0 4px 8px #0004}
+.grab{font-family:var(--f-fun);font-size:30px;border:0;border-radius:50%;width:150px;height:150px;justify-self:center;background:radial-gradient(circle at 40% 35%,#ff8f84,var(--bad));color:#fff;cursor:pointer;box-shadow:0 8px 0 color-mix(in srgb,var(--bad) 55%,#000)}
+.grab:active{transform:translateY(5px);box-shadow:0 3px 0 color-mix(in srgb,var(--bad) 55%,#000)}
+.grab:disabled{filter:grayscale(.8) opacity(.6);cursor:not-allowed}
+.hint{font-size:12px;color:var(--muted);text-align:center;min-height:18px}
+.timer{height:8px;border-radius:4px;background:var(--off);overflow:hidden}
+.timer i{display:block;height:100%;background:var(--go);width:100%}
+.timer i.hurry{background:var(--bad)}
+.gotlist{font-size:12px;color:var(--muted);text-align:center;min-height:18px}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.bottom{grid-template-columns:minmax(0,1fr)}}
+.lamps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.lamp{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);min-width:0}
+.lamp::before{content:"";flex:none;width:10px;height:10px;border-radius:50%;background:var(--off)}
+.lamp.on::before{background:var(--go)} .lamp.red.on::before{background:var(--bad)} .lamp.amb.on::before{background:var(--accent)}
+.mini{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.mini button{font:12px var(--f-ui);border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:6px;padding:5px 9px;cursor:pointer}
+.mini button.r{border-color:var(--bad);color:var(--bad)}
+.mini button[aria-pressed="true"]{background:var(--bad);color:#fff}
+.al{font-size:12px;color:var(--bad);min-height:18px;margin-top:6px}
+.steps{font:12px var(--f-num);color:var(--muted);margin-top:6px}
+details summary{cursor:pointer;font-size:12px;color:var(--muted);letter-spacing:.06em;font-weight:600}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 6px}
+.tabs button{font:12px var(--f-num);border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:5px;padding:3px 8px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--cab);color:#fff;border-color:var(--cab)}
+.il{font:12px/1.5 var(--f-num);max-height:320px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;white-space:pre}
+.il .c{color:var(--muted)} .il .on{color:var(--go);font-weight:600} .il .op{color:var(--cab)}
+.note{font-size:12px;color:var(--muted);max-width:75ch}
+.err3d{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:14px;text-align:center;padding:20px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>XYZ 인형 뽑기</h1>
+    <span class="sub">곰돌이·토끼·오리·로봇·비치볼·선물 상자… 집게는 학습 랙 XYZ 래더(7개)가 그대로 움직입니다</span>
+  </header>
+
+  <div class="top">
+    <div class="card stage">
+      <div id="view" aria-label="3D 인형 뽑기 기계 (드래그로 둘러보기)"></div>
+      <div class="hud"><span class="pos" id="pos">X 0.0 Y 0.0 Z 0.0</span></div>
+      <div class="snds" role="group" aria-label="소리 설정"><button class="snd" id="snd" aria-pressed="true">소리</button><button class="snd" id="mus" aria-pressed="true">음악</button><button class="snd" id="voc" aria-pressed="true">목소리</button></div>
+      <div class="drag">드래그 = 둘러보기</div>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <div class="card ctrl" aria-label="조작판">
+      <div class="score">
+        <div><b id="cr">0</b><span>남은 판</span></div>
+        <div><b id="win">0</b><span>뽑은 인형</span></div>
+        <div><b id="tm">-</b><span>남은 초</span></div>
+      </div>
+      <div class="timer"><i id="tbar"></i></div>
+      <div class="gotlist" id="gotlist">아직 뽑은 게 없어요</div>
+      <button class="coin" id="coin">동전 넣기 (+1판)</button>
+      <div class="stick" role="group" aria-label="조이스틱">
+        <span></span><button class="dir" data-mom="M3023" aria-label="뒤로">▲</button><span></span>
+        <button class="dir" data-mom="M3021" aria-label="왼쪽">◀</button><span class="knob"></span><button class="dir" data-mom="M3020" aria-label="오른쪽">▶</button>
+        <span></span><button class="dir" data-mom="M3022" aria-label="앞으로">▼</button><span></span>
+      </div>
+      <div class="hint" id="hint">키보드 방향키로도 움직입니다 · 스페이스 = 뽑기</div>
+      <button class="grab" id="grab" disabled>뽑기!</button>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <h2>기계 상태 (래더 디바이스)</h2>
+      <div class="lamps" id="lamps"></div>
+      <div class="steps" id="steps"></div>
+      <div class="al" id="al"></div>
+      <div class="mini">
+        <button id="reset">에러 리셋 M3011</button>
+        <button id="home">원점 복귀 M3014</button>
+        <button class="r" id="estop" aria-pressed="false">비상 정지 X0</button>
+        <button id="refill">인형 다시 채우기</button>
+      </div>
+    </div>
+    <div class="card">
+      <details>
+        <summary>래더 원문 보기 (실행 중 · 초록 = ON)</summary>
+        <div class="tabs" id="tabs"></div>
+        <div class="il" id="il"></div>
+      </details>
+      <p class="note">뽑기를 누르면 점 목록을 P1 = 지금 X·Y 에서 쌓인 상품 높이까지 내려가기(닿으면 멈추는 진짜 기계처럼 Z 목표를 계산), P2 = 출구(15,15) 위 Z 5mm 로 채우고 자동 운전(M3016·M3012)을 겁니다. 래더 자동 단계 40(머묾)에서 P1 이면 집게를 오므리고 P2 면 벌립니다. 집게 흔들림은 래더 축의 가속도로 계산한 진자 운동입니다. 소리는 X·Y·Z 축 속도에서 만듭니다.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const PROGRAMS = [{"name": "XYZ_SYS", "lines": ["# [1/6] XYZ_SYS : XYZ 3축 샘플 — 준비·서보 ON·모드·정지·리셋·모니터 (2026-11-06 샘플)", "# 구성(가정): Q13UDV + QD75MH4 (선두 I/O 0060, 축1=X 축2=Y 축3=Z) + MR-J4-B x3", "# QD75 신호: X60 READY, X61 동기, X68/X69/X6A 축 에러, X6C/X6D/X6E BUSY, X70~72 기동 완료, X74~76 위치결정 완료", "#            Y60 PLC READY, Y61 서보 ON(전축), Y64~66 축 정지, Y70~72 위치결정 기동, Y68~6D JOG(X+ X- Y+ Y- Z+ Z-)", "# 가정 입력(실제 배선에 맞게 바꿀 것): X0 비상정지 정상(b접점, 정상 ON), X1 도어 닫힘(정상 ON)", "# 단위: 위치 0.1um (1mm = 10000), 속도 0.01mm/min, Z 는 위가 0 (아래로 갈수록 +)", "#", "# 유닛 비트 블록 M3000~ (실무 패턴 오프셋): 3032 도어 열림, 3036 에러 리셋, 3040 원점 완료(전축),", "#   3056 일시정지, 3060 자동 운전 중, 3061 자동 시작 펄스, 3062 사이클 정지 중, 3064 수동 운전 중, 3075 중알람", "# GOT 버튼(가정): M3010 정지, M3011 에러 리셋, M3012 자동 시작, M3013 사이클 정지, M3014 원점 복귀 시작,", "#   M3016 자동 모드 선택(ON 자동 / OFF 수동), M3017 서보 OFF 요청", "", "// 1. 모니터: 현재 위치 D3000 X / D3002 Y / D3004 Z (32비트 0.1um), 에러 번호 D3006 X / D3007 Y / D3008 Z", "LD SM400", "DMOV U6\\G800 D3000", "DMOV U6\\G900 D3002", "DMOV U6\\G1000 D3004", "MOV U6\\G806 D3006", "MOV U6\\G906 D3007", "MOV U6\\G1006 D3008", "", "// 2. 안전 입력: 비상정지(X0 b접점) 끊기면 M3003, 도어 열림 M3032", "LDI X0", "OUT M3003", "LDI X1", "OUT M3032", "", "// 3. 에러 리셋 펄스 M3036 (GOT M3011) → QD75 Cd.5 축 에러 리셋 (에러가 있는 축만)", "LD M3011", "PLS M3036", "LD M3036", "AND X68", "MOV K1 U6\\G1502", "LD M3036", "AND X69", "MOV K1 U6\\G1602", "LD M3036", "AND X6A", "MOV K1 U6\\G1702", "LDF M3011", "MOV K0 U6\\G1502", "MOV K0 U6\\G1602", "MOV K0 U6\\G1702", "", "// 4. 정상 M3007 = 중알람 없음·정지 버튼 아님·서보 OFF 요청 아님·비상정지 아님", "LDI M3075", "ANI M3010", "ANI M3017", "ANI M3003", "OUT M3007", "", "// 5. PLC READY, 서보 ON (비상정지·서보 OFF 요청이면 OFF)", "LD SM400", "OUT Y60", "LDI M3017", "ANI M3003", "OUT Y61", "", "// 6. 운전 가능 M3005 = QD75 READY·동기·서보 ON·정상", "LD X60", "AND X61", "AND Y61", "AND M3007", "OUT M3005", "", "// 7. 원점 완료가 풀리는 경우: 서보 OFF·QD75 READY 꺼짐", "LDI Y61", "ORI X60", "RST M3040", "", "// 8. 정지 처리: 정상이 아니면 전축 정지, 모든 이동 요구·자동·원점 순서 초기화", "LDI M3007", "OUT Y64", "OUT Y65", "OUT Y66", "RST M3060", "MOV K0 D3170", "MOV K0 D3190", "BKRST M3200 K16", "BKRST M3220 K16", "BKRST M3240 K16", "", "// 9. 모드: 자동 모드 M3016 ON 이면 자동, OFF 면 수동 운전 가능 M3064", "LDI M3016", "AND M3005", "ANI M3060", "OUT M3064"]}, {"name": "XYZ_ERR", "lines": ["# [2/6] XYZ_ERR : 알람 (실무 표준형: 조건 → 자기유지(에러 리셋 버튼 M3011 누르는 동안 해제 — 11-07 고침: 펄스 M3036 이면 축 에러 알람이 한 번에 안 풀림) → 타이머 지나면 알람, 알람 M 번호 = 타이머 T 번호)", "# 알람 구역 M1400~M1431 (워드 K2M1400 으로 중알람 판정), 타이머 T1400~T1431 (0.1초 단위)", "# 1400 X축 서보 에러, 1401 Y축, 1402 Z축, 1403 비상정지, 1404 도어 열림(자동 중)", "# 1410 X 기동 무응답, 1411 Y, 1412 Z (요구 후 0.3초 안에 기동 완료 신호 없음)", "# 1420 X(XY) 이동 시간 초과, 1421 Y, 1422 Z (10초, 원점 복귀 중 제외), 1423 원점 복귀 시간 초과 (60초)", "", "// 1. 축 서보 에러 (QD75 축 에러 신호, 0.1초)", "LD X68", "LD M1400", "ANI M3011", "ORB", "MPS", "AND T1400", "OUT M1400", "MPP", "OUT T1400 K1", "", "LD X69", "LD M1401", "ANI M3011", "ORB", "MPS", "AND T1401", "OUT M1401", "MPP", "OUT T1401 K1", "", "LD X6A", "LD M1402", "ANI M3011", "ORB", "MPS", "AND T1402", "OUT M1402", "MPP", "OUT T1402 K1", "", "// 2. 비상정지 (0.1초)", "LD M3003", "LD M1403", "ANI M3011", "ORB", "MPS", "AND T1403", "OUT M1403", "MPP", "OUT T1403 K1", "", "// 3. 자동 운전 중 도어 열림 (0.1초)", "LD M3032", "AND M3060", "LD M1404", "ANI M3011", "ORB", "MPS", "AND T1404", "OUT M1404", "MPP", "OUT T1404 K1", "", "// 4. 기동 무응답: 이동 요구·지령 냄(M32x1) 인데 기동 완료(M32x2) 가 0.3초 안에 안 옴", "LD M3201", "ANI M3202", "LD M1410", "ANI M3011", "ORB", "MPS", "AND T1410", "OUT M1410", "MPP", "OUT T1410 K3", "", "LD M3221", "ANI M3222", "LD M1411", "ANI M3011", "ORB", "MPS", "AND T1411", "OUT M1411", "MPP", "OUT T1411 K3", "", "LD M3241", "ANI M3242", "LD M1412", "ANI M3011", "ORB", "MPS", "AND T1412", "OUT M1412", "MPP", "OUT T1412 K3", "", "// 5. 이동 시간 초과: 이동 요구(M32x0) 가 10초 넘게 안 끝남 (원점 복귀 포함, 긴 이동이면 시간 늘릴 것)", "LD M3200", "ANI M3101", "LD M1420", "ANI M3011", "ORB", "MPS", "AND T1420", "OUT M1420", "MPP", "OUT T1420 K100", "", "LD M3220", "ANI M3101", "LD M1421", "ANI M3011", "ORB", "MPS", "AND T1421", "OUT M1421", "MPP", "OUT T1421 K100", "", "LD M3240", "ANI M3101", "LD M1422", "ANI M3011", "ORB", "MPS", "AND T1422", "OUT M1422", "MPP", "OUT T1422 K100", "", "// 5-1. 원점 복귀 시간 초과 (60초)", "LD M3101", "LD M1423", "ANI M3011", "ORB", "MPS", "AND T1423", "OUT M1423", "MPP", "OUT T1423 K600", "", "// 6. 중알람 M3075 = 알람 구역에 하나라도 켜져 있음", "LD<> K0 K4M1400", "ORD<> K0 K8M1416", "OUT M3075"]}, {"name": "XYZ_HOME", "lines": ["# [3/6] XYZ_HOME : 원점 복귀 — 안전 순서: Z 먼저 위로(원점) → X·Y 동시 → 원점 완료 M3040", "# 수동 모드(M3064)에서 GOT M3014 로 시작. 순서 단계 D3190 (0 대기, 1 Z, 2 XY, 3 확인)", "# QD75 기계 원점복귀 = 기동 번호 9001", "", "// 1. 시작: 수동 모드·원점 순서 중 아님", "LD M3014", "AND M3064", "PLS M3100", "LD M3100", "LD= D3190 K0", "ANB", "RST M3040", "MOV K1 D3190", "", "// 1-1. 원점 복귀 중 M3101 (JOG 막기·시간 초과 구분용)", "LD<> D3190 K0", "OUT M3101", "", "// 2. Z 원점 먼저", "LD= D3190 K1", "MOV K9001 D3182", "SET M3240", "MOV K2 D3190", "", "// 3. Z 끝나면 X·Y 동시 원점", "LD= D3190 K2", "AND M3243", "RST M3243", "MOV K9001 D3180", "MOV K9001 D3181", "SET M3200", "SET M3220", "MOV K3 D3190", "", "// 4. X·Y 둘 다 끝나면 원점 완료", "LD= D3190 K3", "AND M3203", "AND M3223", "RST M3203", "RST M3223", "SET M3040", "MOV K0 D3190"]}, {"name": "XYZ_MANU", "lines": ["# [4/6] XYZ_MANU : 수동 JOG (GOT 버튼 누르는 동안) — X+ M3020, X- M3021, Y+ M3022, Y- M3023, Z+(아래) M3024, Z-(위) M3025", "# 인터락: X·Y JOG 는 Z 가 안전 높이(D3152) 위에 있을 때만 (Z 가 내려가 있으면 M3071 경고 램프)", "# JOG 속도 D3164 mm/min (1~3000) → Cd.17 (0.01mm/min, 32비트) 축 1·2·3", "", "// 1. JOG 속도 범위 제한 → 버퍼", "LD SM402", "MOV K300 D3164", "LD<= D3164 K0", "MOV K1 D3164", "LD> D3164 K3000", "MOV K3000 D3164", "LD SM400", "* D3164 K100 D3166", "DMOV D3166 U6\\G1518", "DMOV D3166 U6\\G1618", "DMOV D3166 U6\\G1718", "", "// 2. Z 안전 높이 확인 M3070 (Z 위치 <= 안전 높이, 위가 0)", "LDD<= D3004 D3152", "OUT M3070", "", "// 3. X·Y JOG 를 눌렀는데 Z 가 내려가 있음 → 경고 M3071 (GOT 표시)", "LD M3020", "OR M3021", "OR M3022", "OR M3023", "ANI M3070", "OUT M3071", "", "// 4. JOG 출력 (동시 누름·자동 중·원점 복귀 중·Z 내려감이면 금지)", "LD M3020", "ANI M3021", "AND M3064", "ANI M3101", "AND M3070", "OUT Y68", "LD M3021", "ANI M3020", "AND M3064", "ANI M3101", "AND M3070", "OUT Y69", "LD M3022", "ANI M3023", "AND M3064", "ANI M3101", "AND M3070", "OUT Y6A", "LD M3023", "ANI M3022", "AND M3064", "ANI M3101", "AND M3070", "OUT Y6B", "LD M3024", "ANI M3025", "AND M3064", "ANI M3101", "OUT Y6C", "LD M3025", "ANI M3024", "AND M3064", "ANI M3101", "OUT Y6D"]}, {"name": "XYZ_AUTO", "lines": ["# [5/6] XYZ_AUTO : 자동 운전 — 점 목록(최대 8점)을 돌며 Z 위로 → XY 보간 이동 → Z 내림 → 머묾 → Z 위로 → 다음 점", "# 점 목록 D3100~ : 점마다 6워드 = X(32) Y(32) Z(32) 0.1um.  P1 D3100, P2 D3106, ... P8 D3142", "# 설정: D3150 점 개수(1~8), D3152 Z 안전 높이(32), D3154 XY 속도(32, 0.01mm/min), D3156 Z 속도(32), D3158 머묾 x0.1초, D3161 반복 횟수", "# 상태: D3160 지금 점 번호, D3162 끝난 반복, D3170 단계 (0 대기, 10/11 Z 위로, 20/21 XY, 30/31 Z 내림, 40 머묾, 50/51 Z 위로, 60 다음 점)", "# QD75 위치결정 데이터: X(축1) No.10 = ABS 2축 직선 보간(H0AF4: 제어 0AH, 보간축=축2, 가감속 No.3), Y(축2) No.10 = 목표 Y", "#                      Z(축3) No.11 = 내림 목표, No.12 = 안전 높이 (H01F0: ABS 1축, 가감속 No.3)", "# 버퍼: 축 n 의 데이터 No.k = 2000/8000/14000 + (k-1)x10 : +0 식별자, +4 속도(32), +6 위치(32)", "", "// 1. 처음 값 (샘플: RUN 할 때마다 넣음. 실제는 래치 영역·GOT 입력으로)", "LD SM402", "MOV K4 D3150", "DMOV K100000 D3152", "DMOV K300000 D3154", "DMOV K100000 D3156", "MOV K5 D3158", "MOV K1 D3161", "DMOV K500000 D3100", "DMOV K500000 D3102", "DMOV K300000 D3104", "DMOV K1500000 D3106", "DMOV K500000 D3108", "DMOV K300000 D3110", "DMOV K1500000 D3112", "DMOV K1200000 D3114", "DMOV K400000 D3116", "DMOV K500000 D3118", "DMOV K1200000 D3120", "DMOV K300000 D3122", "", "// 2. 점 개수 1~8 로 제한, 지금 점의 목록 위치 Z5 = (점 번호 - 1) x 6", "LD< D3150 K1", "MOV K1 D3150", "LD> D3150 K8", "MOV K8 D3150", "LD SM400", "- D3160 K1 D3168", "* D3168 K6 D3172", "MOV D3172 Z5", "", "// 3. 자동 시작 (GOT M3012): 자동 모드·운전 가능·원점 완료·자동 중 아님", "LD M3012", "PLS M3061", "LD M3061", "AND M3016", "AND M3005", "AND M3040", "ANI M3060", "SET M3060", "RST M3062", "MOV K1 D3160", "MOV K0 D3162", "MOV K10 D3170", "", "// 4. 사이클 정지 (GOT M3013 또는 자동 중 수동 모드로 바꿈): 지금 점을 마치고 끝냄", "LD M3013", "ORI M3016", "AND M3060", "SET M3062", "", "// 5. 단계 10: Z 안전 높이로 (No.12)", "LD= D3170 K10", "MOV H1F0 U6\\G14110", "DMOV D3156 U6\\G14114", "DMOV D3152 U6\\G14116", "MOV K12 D3182", "SET M3240", "MOV K11 D3170", "LD= D3170 K11", "AND M3243", "RST M3243", "MOV K20 D3170", "", "// 6. 단계 20: XY 보간 이동 (X No.10 기준축, Y No.10 보간축 목표)", "LD= D3170 K20", "MOV H0AF4 U6\\G2090", "DMOV D3154 U6\\G2094", "DMOV D3100Z5 U6\\G2096", "DMOV D3102Z5 U6\\G8096", "MOV K10 D3180", "SET M3200", "MOV K21 D3170", "LD= D3170 K21", "AND M3203", "RST M3203", "MOV K30 D3170", "", "// 7. 단계 30: Z 내림 (No.11)", "LD= D3170 K30", "MOV H1F0 U6\\G14100", "DMOV D3156 U6\\G14104", "DMOV D3104Z5 U6\\G14106", "MOV K11 D3182", "SET M3240", "MOV K31 D3170", "LD= D3170 K31", "AND M3243", "RST M3243", "MOV K40 D3170", "", "// 8. 단계 40: 머묾 (D3158 x 0.1초)", "LD= D3170 K40", "OUT T1450 D3158", "LD= D3170 K40", "AND T1450", "MOV K50 D3170", "", "// 9. 단계 50: Z 다시 위로 (No.12)", "LD= D3170 K50", "MOV K12 D3182", "SET M3240", "MOV K51 D3170", "LD= D3170 K51", "AND M3243", "RST M3243", "MOV K60 D3170", "", "// 10. 단계 60: 다음 점. 마지막 점이면 반복 +1. 반복 다 했거나 사이클 정지면 끝, 아니면 단계 20", "LD= D3170 K60", "INC D3160", "LD= D3170 K60", "AND> D3160 D3150", "MOV K1 D3160", "INC D3162", "LD= D3170 K60", "LD>= D3162 D3161", "OR M3062", "ANB", "RST M3060", "RST M3062", "MOV K0 D3170", "LD= D3170 K60", "MOV K20 D3170"]}, {"name": "XYZ_MT", "lines": ["# [6/6] XYZ_MT : 모션 지령 블록 (축마다 같은 모양) — 자동·원점 프로그램은 \"이동 요구\" 비트와 기동 번호만 만든다", "# 축 X: 요구 M3200, 지령 냄 M3201, 기동 완료 M3202, 이동 끝 M3203, 기동 번호 D3180 → U6\\G1500, 기동 Y70, 기동완료 X70, BUSY X6C, 위치결정완료 X74", "# 축 Y: M3220~3223, D3181 → U6\\G1600, Y71, X71, X6D, X75", "# 축 Z: M3240~3243, D3182 → U6\\G1700, Y72, X72, X6E, X76", "# XY 보간 이동은 기준축 X 만 기동(보간축 Y 는 QD75 가 같이 움직임) → X 블록의 끝 = XY 끝", "# 이동 끝 비트(M32x3)는 요구 쪽에서 읽고 RST 한다", "# 끝 판정 = 기동 확인 뒤 BUSY 꺼짐·축 에러 없음 (원점 복귀는 위치결정 완료 신호가 안 켜지므로 BUSY 로 봄)", "", "// 1. X 축: 요구·운전 가능·BUSY 아님·아직 안 냄 → 기동 번호 쓰고 기동", "LD M3200", "AND M3005", "ANI X6C", "ANI M3201", "MOV D3180 U6\\G1500", "SET Y70", "SET M3201", "// 기동 완료 신호 → 기동 끄기, 기동 확인", "LD Y70", "AND X70", "RST Y70", "SET M3202", "// 위치결정 완료·BUSY 꺼짐 → 이동 끝", "LD M3202", "ANI X6C", "ANI X68", "SET M3203", "RST M3200", "RST M3201", "RST M3202", "", "// 2. Y 축", "LD M3220", "AND M3005", "ANI X6D", "ANI M3221", "MOV D3181 U6\\G1600", "SET Y71", "SET M3221", "LD Y71", "AND X71", "RST Y71", "SET M3222", "LD M3222", "ANI X6D", "ANI X69", "SET M3223", "RST M3220", "RST M3221", "RST M3222", "", "// 3. Z 축", "LD M3240", "AND M3005", "ANI X6E", "ANI M3241", "MOV D3182 U6\\G1700", "SET Y72", "SET M3241", "LD Y72", "AND X72", "RST Y72", "SET M3242", "LD M3242", "ANI X6E", "ANI X6A", "SET M3243", "RST M3240", "RST M3241", "RST M3242", "", "// 4. 정지되면 기동 신호도 끔", "LDI M3007", "RST Y70", "RST Y71", "RST Y72"]}, {"name": "XYZ_GOT", "lines": ["# [7/7] XYZ_GOT : GOT 화면용 mm 변환 (GT1675 는 정수에 소수점을 못 붙여서 실수(Real)로 바꿈)", "# 표시: D3400/D3402/D3404 = X/Y/Z 현재 위치 mm (실수)", "# 점 목록 입력(GOT, 실수 mm): D3500 + 6x(n-1) = Pn 의 X, +2 Y, +4 Z  →  매 스캔 D3100~ (0.1um 정수) 로 변환", "# 설정 입력: D3550 Z 안전 높이 mm(실수) → D3152, D3552/D3554 XY/Z 속도 mm/min(16비트 정수) → D3154/D3156 (x100)", "# 상태 표시: D3410 지금 점, D3412 끝난 반복 (실수, GOT 숫자 표시 틀을 같이 쓰려고)", "# 알람 묶음 램프: M3080 기동 무응답(M1410~1412), M3081 이동 시간 초과(M1420~1422)", "", "// 1. 처음 한 번: 래더 처음 값(0.1um) → GOT 입력칸(실수 mm)", "LD SM402", "DFLT D3100 D3500", "E/ D3500 E10000 D3500", "DFLT D3102 D3502", "E/ D3502 E10000 D3502", "DFLT D3104 D3504", "E/ D3504 E10000 D3504", "DFLT D3106 D3506", "E/ D3506 E10000 D3506", "DFLT D3108 D3508", "E/ D3508 E10000 D3508", "DFLT D3110 D3510", "E/ D3510 E10000 D3510", "DFLT D3112 D3512", "E/ D3512 E10000 D3512", "DFLT D3114 D3514", "E/ D3514 E10000 D3514", "DFLT D3116 D3516", "E/ D3516 E10000 D3516", "DFLT D3118 D3518", "E/ D3518 E10000 D3518", "DFLT D3120 D3520", "E/ D3520 E10000 D3520", "DFLT D3122 D3522", "E/ D3522 E10000 D3522", "DFLT D3124 D3524", "E/ D3524 E10000 D3524", "DFLT D3126 D3526", "E/ D3526 E10000 D3526", "DFLT D3128 D3528", "E/ D3528 E10000 D3528", "DFLT D3130 D3530", "E/ D3530 E10000 D3530", "DFLT D3132 D3532", "E/ D3532 E10000 D3532", "DFLT D3134 D3534", "E/ D3534 E10000 D3534", "DFLT D3136 D3536", "E/ D3536 E10000 D3536", "DFLT D3138 D3538", "E/ D3538 E10000 D3538", "DFLT D3140 D3540", "E/ D3540 E10000 D3540", "DFLT D3142 D3542", "E/ D3542 E10000 D3542", "DFLT D3144 D3544", "E/ D3544 E10000 D3544", "DFLT D3146 D3546", "E/ D3546 E10000 D3546", "DFLT D3152 D3550", "E/ D3550 E10000 D3550", "D/ D3154 K100 D3594", "MOV D3594 D3552", "D/ D3156 K100 D3594", "MOV D3594 D3554", "", "// 2. 매 스캔: GOT 입력칸(실수 mm) → 래더가 쓰는 값(0.1um 정수)", "LD SM400", "E* D3500 E10000 D3590", "DINT D3590 D3100", "E* D3502 E10000 D3590", "DINT D3590 D3102", "E* D3504 E10000 D3590", "DINT D3590 D3104", "E* D3506 E10000 D3590", "DINT D3590 D3106", "E* D3508 E10000 D3590", "DINT D3590 D3108", "E* D3510 E10000 D3590", "DINT D3590 D3110", "E* D3512 E10000 D3590", "DINT D3590 D3112", "E* D3514 E10000 D3590", "DINT D3590 D3114", "E* D3516 E10000 D3590", "DINT D3590 D3116", "E* D3518 E10000 D3590", "DINT D3590 D3118", "E* D3520 E10000 D3590", "DINT D3590 D3120", "E* D3522 E10000 D3590", "DINT D3590 D3122", "E* D3524 E10000 D3590", "DINT D3590 D3124", "E* D3526 E10000 D3590", "DINT D3590 D3126", "E* D3528 E10000 D3590", "DINT D3590 D3128", "E* D3530 E10000 D3590", "DINT D3590 D3130", "E* D3532 E10000 D3590", "DINT D3590 D3132", "E* D3534 E10000 D3590", "DINT D3590 D3134", "E* D3536 E10000 D3590", "DINT D3590 D3136", "E* D3538 E10000 D3590", "DINT D3590 D3138", "E* D3540 E10000 D3590", "DINT D3590 D3140", "E* D3542 E10000 D3590", "DINT D3590 D3142", "E* D3544 E10000 D3590", "DINT D3590 D3144", "E* D3546 E10000 D3590", "DINT D3590 D3146", "E* D3550 E10000 D3590", "DINT D3590 D3152", "* D3552 K100 D3592", "DMOV D3592 D3154", "* D3554 K100 D3592", "DMOV D3592 D3156", "", "// 3. 현재 위치 표시 (mm 실수)", "LD SM400", "DFLT D3000 D3400", "E/ D3400 E10000 D3400", "DFLT D3002 D3402", "E/ D3402 E10000 D3402", "DFLT D3004 D3404", "E/ D3404 E10000 D3404", "", "FLT D3160 D3410", "FLT D3162 D3412", "", "// 4. 알람 묶음 램프", "LD M1410", "OR M1411", "OR M1412", "OUT M3080", "LD M1420", "OR M1421", "OR M1422", "OUT M3081"]}];
+
+// ───────── 메모리 ─────────
+const D = new Int16Array(20000), G6 = new Int16Array(20000), Z = new Int16Array(16);
+const BIT = new Map();               // 'M3000' 'X60' 'Y70'
+const TIM = new Map();               // n → {acc, done}
+let firstScan = true;
+const fbuf = new DataView(new ArrayBuffer(4));
+const getB = k => BIT.get(k) || 0, setB = (k, v) => BIT.set(k, v ? 1 : 0);
+
+function xyKey(p, h) { return p + parseInt(h, 16).toString(16).toUpperCase(); }
+function arrOf(sp) { return sp === 'D' ? D : sp === 'U6' ? G6 : Z; }
+function wordLoc(tok) {
+  let m = tok.match(/^(D|U6\\G|Z)(\d+)(?:Z(\d+))?$/);
+  if (!m) return null;
+  const sp = m[1] === 'U6\\G' ? 'U6' : m[1];
+  const n = +m[2], z = m[3] !== undefined ? +m[3] : -1;
+  return { a: arrOf(sp), idx: () => n + (z >= 0 ? Z[z] : 0) };
+}
+function bitRef(tok) {
+  let m;
+  if ((m = tok.match(/^(.+)\.([0-9A-F])$/))) {
+    const w = wordLoc(m[1]), b = parseInt(m[2], 16);
+    return { get: () => (w.a[w.idx()] >> b) & 1, set: v => { const i = w.idx(); w.a[i] = v ? (w.a[i] | (1 << b)) : (w.a[i] & ~(1 << b)); } };
+  }
+  if ((m = tok.match(/^SM(\d+)$/))) { const n = +m[1]; return { get: () => n === 400 ? 1 : n === 402 ? (firstScan ? 1 : 0) : 0, set: () => {} }; }
+  if ((m = tok.match(/^([XY])([0-9A-F]+)$/))) { const k = xyKey(m[1], m[2]); return { get: () => getB(k), set: v => setB(k, v) }; }
+  if ((m = tok.match(/^T(\d+)$/))) { const n = +m[1]; return { get: () => (TIM.get(n) || {}).done ? 1 : 0, set: () => {} }; }
+  if ((m = tok.match(/^M(\d+)$/))) { const k = tok; return { get: () => getB(k), set: v => setB(k, v) }; }
+  throw new Error('bit? ' + tok);
+}
+function wordRef(tok) {
+  let m;
+  if ((m = tok.match(/^K(\d)([MXY])([0-9A-F]+)$/))) {          // K4M1400 같은 비트 묶음
+    const nb = +m[1] * 4, p = m[2], base = p === 'M' ? +m[3] : parseInt(m[3], 16);
+    const key = i => p === 'M' ? 'M' + (base + i) : p + (base + i).toString(16).toUpperCase();
+    const g = () => { let v = 0; for (let i = 0; i < nb; i++) v |= getB(key(i)) << i; return v | 0; };
+    return { g16: () => (g() << 16) >> 16, g32: g, s16: v => { for (let i = 0; i < nb; i++) setB(key(i), (v >> i) & 1); }, s32: v => { for (let i = 0; i < nb; i++) setB(key(i), (v >> i) & 1); } };
+  }
+  if ((m = tok.match(/^K(-?\d+)$/))) { const v = +m[1]; return { g16: () => v, g32: () => v, gf: () => v }; }
+  if ((m = tok.match(/^H([0-9A-F]+)$/))) { const v = parseInt(m[1], 16); return { g16: () => (v << 16) >> 16, g32: () => v | 0 }; }
+  if ((m = tok.match(/^E(-?[\d.]+)$/))) { const v = +m[1]; return { gf: () => v }; }
+  if ((m = tok.match(/^T(\d+)$/))) { const n = +m[1]; return { g16: () => Math.floor(((TIM.get(n) || {}).acc || 0) * 10) }; }
+  const w = wordLoc(tok); if (!w) throw new Error('word? ' + tok);
+  const A = w.a;
+  return {
+    g16: () => A[w.idx()],
+    s16: v => { A[w.idx()] = v; },
+    g32: () => { const i = w.idx(); return ((A[i + 1] << 16) | (A[i] & 0xFFFF)) | 0; },
+    s32: v => { const i = w.idx(); v |= 0; A[i] = v & 0xFFFF; A[i + 1] = v >> 16; },
+    gf: () => { const i = w.idx(); fbuf.setInt16(0, A[i], true); fbuf.setInt16(2, A[i + 1], true); return fbuf.getFloat32(0, true); },
+    sf: x => { const i = w.idx(); fbuf.setFloat32(0, x, true); A[i] = fbuf.getInt16(0, true); A[i + 1] = fbuf.getInt16(2, true); },
+  };
+}
+
+// ───────── 래더 해석기 ─────────
+const CMP = { '=': (a, b) => a === b, '<>': (a, b) => a !== b, '<': (a, b) => a < b, '>': (a, b) => a > b, '<=': (a, b) => a <= b, '>=': (a, b) => a >= b };
+function compile(p) {
+  const ins = [];
+  p.lines.forEach((raw, li) => {
+    const s = raw.trim();
+    if (!s || s.startsWith('#') || s.startsWith('//')) return;
+    const t = s.split(/\s+/), op = t[0], a = t.slice(1);
+    const it = { op, li, prev: 0, a };
+    let m;
+    if ((m = op.match(/^(LD|AND|OR)(D?)(<>|<=|>=|=|<|>)$/))) {
+      it.kind = 'cmp'; it.k = m[1]; it.f = CMP[m[3]]; const r1 = wordRef(a[0]), r2 = wordRef(a[1]);
+      it.g1 = m[2] ? r1.g32 : r1.g16; it.g2 = m[2] ? r2.g32 : r2.g16;
+    } else if (['LD', 'LDI', 'AND', 'ANI', 'OR', 'ORI', 'LDP', 'LDF'].includes(op)) { it.kind = 'bit'; it.r = bitRef(a[0]); }
+    else if (['OUT', 'OUTH'].includes(op) && /^T\d+$/.test(a[0])) { it.kind = 'tim'; it.n = +a[0].slice(1); it.sv = wordRef(a[1]).g16; it.unit = op === 'OUTH' ? 0.01 : 0.1; }
+    else if (['OUT', 'SET', 'RST', 'PLS'].includes(op)) { it.kind = 'out'; it.r = bitRef(a[0]); }
+    else { it.kind = 'fn'; it.refs = a.map(x => /^"/.test(x) ? x : (op === 'BKRST' && x === a[0]) ? x : wordRef(x)); }
+    ins.push(it);
+  });
+  p.ins = ins;
+}
+function runProg(p, dt) {
+  let acc = 1, st = [], ms = [], hasOut = false;
+  for (const it of p.ins) {
+    const op = it.op;
+    if (it.kind === 'cmp' || it.kind === 'bit') {
+      if (op.startsWith('LD')) { if (hasOut) { st = []; hasOut = false; } else st.push(acc); }
+      let v;
+      if (it.kind === 'cmp') v = it.f(it.g1(), it.g2()) ? 1 : 0;
+      else if (op === 'LDP') { const b = it.r.get(); v = b && !it.prev ? 1 : 0; it.prev = b; }
+      else if (op === 'LDF') { const b = it.r.get(); v = !b && it.prev ? 1 : 0; it.prev = b; }
+      else { v = it.r.get(); if (op.endsWith('I')) v ^= 1; }
+      if (op.startsWith('LD')) acc = v; else if (op.startsWith('AN')) acc &= v; else acc |= v;
+      continue;
+    }
+    if (op === 'ANB') { acc = st.pop() & acc; continue; }
+    if (op === 'ORB') { acc = st.pop() | acc; continue; }
+    if (op === 'MPS') { ms.push(acc); continue; }
+    if (op === 'MRD') { acc = ms[ms.length - 1]; continue; }
+    if (op === 'MPP') { acc = ms.pop(); continue; }
+    hasOut = true;
+    if (it.kind === 'tim') {
+      let t = TIM.get(it.n); if (!t) TIM.set(it.n, t = { acc: 0, done: 0 });
+      if (acc) { t.acc += dt; t.done = t.acc >= it.sv() * it.unit - 1e-9 ? 1 : 0; } else { t.acc = 0; t.done = 0; }
+      continue;
+    }
+    if (op === 'OUT') { it.r.set(acc); continue; }
+    if (op === 'PLS') { it.r.set(acc && !it.prev); it.prev = acc; continue; }
+    if (!acc) continue;
+    if (op === 'SET') { it.r.set(1); continue; }
+    if (op === 'RST') { it.r.set(0); continue; }
+    const r = it.refs;
+    switch (op) {
+      case 'MOV': r[1].s16(r[0].g16()); break;
+      case 'DMOV': r[1].s32(r[0].g32()); break;
+      case 'INC': r[0].s16(r[0].g16() + 1); break;
+      case '+': r[2].s16(r[0].g16() + r[1].g16()); break;
+      case '-': r[2].s16(r[0].g16() - r[1].g16()); break;
+      case '*': r[2].s32(r[0].g16() * r[1].g16()); break;
+      case 'D/': { const x = r[0].g32(), y = r[1].g32(), q = Math.trunc(x / y); r[2].s32(q); wordRef(it.a[2].replace(/\d+$/, n => +n + 2)).s32(x - q * y); break; }
+      case 'DFLT': r[1].sf(r[0].g32()); break;
+      case 'FLT': r[1].sf(r[0].g16()); break;
+      case 'E/': r[2].sf(Math.fround(r[0].gf() / r[1].gf())); break;
+      case 'E*': r[2].sf(Math.fround(r[0].gf() * r[1].gf())); break;
+      case 'DINT': r[1].s32(Math.round(r[0].gf())); break;
+      case 'BKRST': { const base = +it.a[0].slice(1), n = r[1].g16(); for (let i = 0; i < n; i++) setB('M' + (base + i), 0); break; }
+      default: throw new Error(p.name + ': 모르는 명령 ' + op);
+    }
+  }
+}
+PROGRAMS.forEach(compile);
+
+// ───────── 가짜 QD75MH4 (축1 X, 축2 Y, 축3 Z) ─────────
+const VLIM = 6000, ACC_T = 0.3, HOME_V = 2000;
+const STROKE = [[0, 220], [0, 160], [0, 60]];
+const BUF = [{ pos: 800, err: 806, cmd: 1500, rst: 1502, jog: 1518, data: 2000 }, { pos: 900, err: 906, cmd: 1600, rst: 1602, jog: 1618, data: 8000 }, { pos: 1000, err: 1006, cmd: 1700, rst: 1702, jog: 1718, data: 14000 }];
+const AX = [0, 1, 2].map(i => ({ i, pos: [87.3, 63.1, 22.4][i], v: 0, mode: null, err: 0, x7: 0, x74: -1, prevY7: 0, prevJ: 0, tgt: 0, vcmd: 0, stopping: false }));
+let interp = null;   // {xa, ya, x0,y0,x1,y1, L, s, v, vcmd}
+const g32 = n => ((G6[n + 1] << 16) | (G6[n] & 0xFFFF)) | 0;
+const A = VLIM / 60 / ACC_T;  // mm/s^2
+function moveScalar(cur, v, tgt, vmax, dt) {          // 사다리꼴: 반환 [pos, v, done]
+  const d = tgt - cur, dir = Math.sign(d) || 1;
+  const vstop = Math.sqrt(2 * A * Math.abs(d));
+  const want = dir * Math.min(vmax, vstop);
+  v = want > v ? Math.min(want, v + A * dt) : Math.max(want, v - A * dt);
+  let np = cur + v * dt;
+  if ((tgt - np) * d <= 0 || Math.abs(d) < 1e-4) return [tgt, 0, true];
+  return [np, v, false];
+}
+function qd75(dt) {
+  const y60 = getB('Y60'), srv = getB('Y61');
+  AX.forEach(ax => {
+    const b = BUF[ax.i];
+    if (G6[b.rst] === 1) ax.err = 0;
+    const yStop = getB('Y' + (0x64 + ax.i).toString(16).toUpperCase());
+    const y7 = getB('Y' + (0x70 + ax.i).toString(16).toUpperCase());
+    const jp = getB('Y' + (0x68 + 2 * ax.i).toString(16).toUpperCase()), jm = getB('Y' + (0x69 + 2 * ax.i).toString(16).toUpperCase());
+    if (!srv) { ax.mode = null; ax.v = 0; if (interp && (interp.xa === ax || interp.ya === ax)) interp = null; }
+    if ((yStop || ax.err) && ax.mode) ax.stopping = true;
+    // 기동
+    if (y7 && !ax.prevY7 && y60 && srv && !ax.mode && !ax.err && !yStop) {
+      const n = G6[b.cmd];
+      ax.x74 = -1;
+      if (n === 9001) { ax.mode = 'home'; ax.tgt = 0; ax.vcmd = HOME_V / 60; ax.stopping = false; ax.x7 = 1; }
+      else if (n >= 1 && n <= 600) {
+        const base = b.data + (n - 1) * 10, id = G6[base] & 0xFFFF, ctl = id >> 8;
+        const tgt = g32(base + 6) / 10000, vc = Math.min(g32(base + 4) / 100, VLIM) / 60;
+        if (ctl === 0x0A) {
+          const ya = AX[1], ty = g32(BUF[1].data + (n - 1) * 10 + 6) / 10000;
+          if (tgt < STROKE[0][0] || tgt > STROKE[0][1]) ax.err = 504;
+          else if (ty < STROKE[1][0] || ty > STROKE[1][1]) ax.err = 504;
+          else if (ya.mode || ya.err) ax.err = 200;
+          else {
+            const L = Math.hypot(tgt - ax.pos, ty - ya.pos);
+            interp = { xa: ax, ya, x0: ax.pos, y0: ya.pos, x1: tgt, y1: ty, L, s: 0, v: 0, vcmd: vc };
+            ax.mode = 'interp'; ya.mode = 'slave'; ax.stopping = ya.stopping = false; ax.x7 = 1;
+          }
+        } else {
+          if (tgt < STROKE[ax.i][0] || tgt > STROKE[ax.i][1]) ax.err = 504;
+          else { ax.mode = 'pos'; ax.tgt = tgt; ax.vcmd = vc; ax.stopping = false; ax.x7 = 1; }
+        }
+      } else ax.err = 543;
+    }
+    if (!y7) ax.x7 = 0;
+    ax.prevY7 = y7;
+    // JOG
+    const jd = jp && !jm ? 1 : jm && !jp ? -1 : 0;
+    if (jd && !ax.mode && y60 && srv && !ax.err && !yStop && !(ax.jlim === jd)) { ax.mode = 'jog'; ax.jd = jd; ax.stopping = false; ax.vcmd = Math.min(g32(b.jog) / 100, VLIM) / 60; }
+    if (ax.mode === 'jog' && !jd) ax.stopping = true;
+    ax.prevJ = jd; if (!jd || jd !== ax.jlim) ax.jlim = 0;
+  });
+  // 운동
+  if (interp) {
+    const ip = interp, xa = ip.xa, ya = ip.ya;
+    if (xa.stopping || ya.stopping || xa.err || ya.err) { ip.v = Math.max(0, ip.v - A * dt); if (ip.v === 0) { xa.mode = ya.mode = null; interp = null; } }
+    else { const r = moveScalar(ip.s, ip.v, ip.L, ip.vcmd, dt); ip.s = r[0]; ip.v = r[1]; if (r[2]) { xa.mode = ya.mode = null; interp = null; xa.x74 = 0; ya.x74 = 0; } }
+    if (ip.L > 0) { xa.pos = ip.x0 + (ip.x1 - ip.x0) * ip.s / ip.L; ya.pos = ip.y0 + (ip.y1 - ip.y0) * ip.s / ip.L; }
+    xa.v = ya.v = ip.v;
+  }
+  AX.forEach(ax => {
+    if (ax.mode === 'pos' || ax.mode === 'home') {
+      if (ax.stopping) { const s = Math.sign(ax.v); ax.v = s * Math.max(0, Math.abs(ax.v) - A * dt); ax.pos += ax.v * dt; if (ax.v === 0) ax.mode = null; }
+      else { const r = moveScalar(ax.pos, ax.v, ax.tgt, ax.vcmd, dt); ax.pos = r[0]; ax.v = r[1]; if (r[2]) { if (ax.mode === 'pos') ax.x74 = 0; ax.mode = null; } }
+    } else if (ax.mode === 'jog') {
+      const want = ax.stopping ? 0 : ax.jd * ax.vcmd;
+      ax.v = want > ax.v ? Math.min(want, ax.v + A * dt) : Math.max(want, ax.v - A * dt);
+      ax.pos += ax.v * dt;
+      const [lo, hi] = STROKE[ax.i];
+      if (ax.pos < lo || ax.pos > hi) { ax.pos = Math.min(hi, Math.max(lo, ax.pos)); ax.v = 0; ax.mode = null; ax.err = 508; ax.jlim = ax.jd; }
+      if (ax.stopping && ax.v === 0) ax.mode = null;
+    }
+    if (ax.x74 >= 0) { ax.x74 += dt; if (ax.x74 > 0.3) ax.x74 = -1; }
+    const b = BUF[ax.i], h = n => (n).toString(16).toUpperCase();
+    setB('X' + h(0x68 + ax.i), ax.err); setB('X' + h(0x6C + ax.i), !!ax.mode);
+    setB('X' + h(0x70 + ax.i), ax.x7); setB('X' + h(0x74 + ax.i), ax.x74 >= 0);
+    const p = Math.round(ax.pos * 10000); G6[b.pos] = p & 0xFFFF; G6[b.pos + 1] = p >> 16; G6[b.err] = ax.err;
+  });
+  setB('X60', y60); setB('X61', y60);
+}
+
+
+
+// ───────── 게임 값 ─────────
+const RAIL = 128;                         // 레일 높이 (바닥에서 mm)
+const tipH = z => 62 - z;                 // Z(아래 +) → 집게 발끝 높이
+const PRONG = 32;                         // 몸통 중심 ~ 발끝 (집게 1.3배)
+const CHUTE = { x0: 0, y0: 0, x1: 34, y1: 34 };
+let items = [], claw = { open: 1, target: 1, held: null, str: 1 }, credits = 3, wins = 0, got = [], phase = 'boot', timeLeft = 20, slipT = 0, slip2 = false, toastT = 0, lastBeep = 99;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+
+// 종류: 이름, 반지름, 잡힘(grip), 바닥 반높이 비율
+const KIND = {
+  bear:   { name: '곰돌이', r: 11.5, grip: 0.95, half: 0.95, w: 5 },
+  bunny:  { name: '토끼', r: 10, grip: 0.85, half: 0.9, w: 3 },
+  chick:  { name: '병아리', r: 9, grip: 0.8, half: 0.9, w: 3 },
+  cat:    { name: '고양이', r: 10, grip: 0.85, half: 0.9, w: 3 },
+  duck:   { name: '고무 오리', r: 9, grip: 0.7, half: 0.75, w: 3 },
+  robot:  { name: '로봇', r: 10, grip: 0.6, half: 1.0, w: 2 },
+  ball:   { name: '비치볼', r: 9, grip: 0.38, half: 1.0, w: 2 },
+  gift:   { name: '선물 상자', r: 9, grip: 0.5, half: 0.8, w: 2 },
+  dice:   { name: '주사위', r: 7.5, grip: 0.55, half: 0.75, w: 2 },
+};
+const BAG = Object.entries(KIND).flatMap(([k, v]) => Array(v.w).fill(k));
+const LINES = {
+  air: ['허공을 잡았네~', '어? 아무것도 없잖아!', '바람만 잡았다!', '헛손질~!'],
+  graze: ['아! 아깝다~', '스쳤다 스쳤어!', '조금만 더 왼쪽이었는데!', '으아 아까워!'],
+  hold: ['잡았다!', '올라간다~', '제발 제발…', '오오 간다 간다!'],
+  slip: ['어어어?! 놓쳤다!', '앗, 미끄러졌다~', '안 돼애~', '아 진짜 아깝다!'],
+  win: n => [`대박! ${n} 획득!`, `와! ${n} 뽑았다!`, `오예~ ${n}!`, `성공! ${n} 내 거!`],
+  fail: ['다음엔 꼭!', '한 판 더?', '괜찮아, 다시!'],
+  coin: ['띠링~ 한 판 추가!', '동전 들어간다~'],
+  time: ['시간 끝! 그냥 간다~'],
+};
+function toast(t) { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); toastT = 2.2; }
+function say(t, alsoToast = true) { if (alsoToast) toast(t); voice(t); }
+
+// ───────── 소리 (장난감 느낌, 첫 클릭 뒤 시작) ─────────
+const SND = { ac: null, on: true, music: true, voice: true, master: null, mus: null, mot: {} };
+function audioInit() {
+  if (SND.ac) { if (SND.ac.state === 'suspended') SND.ac.resume(); return; }
+  try { SND.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { return; }
+  const ac = SND.ac;
+  SND.master = ac.createGain(); SND.master.gain.value = SND.on ? 0.8 : 0; SND.master.connect(ac.destination);
+  SND.mus = ac.createGain(); SND.mus.gain.value = SND.music ? 0.5 : 0; SND.mus.connect(SND.master);
+  const noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const nd = noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; SND.noise = noise;
+  // 축마다 장난감 모터: 삼각파 + 떨림(LFO)
+  const motor = (name, f) => {
+    const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+    const lfo = ac.createOscillator(); lfo.frequency.value = 9; const lg = ac.createGain(); lg.gain.value = f * 0.06; lfo.connect(lg).connect(o.frequency);
+    const g = ac.createGain(); g.gain.value = 0; o.connect(g).connect(SND.master); o.start(); lfo.start();
+    SND.mot[name] = { o, g, f, acc: 0 };
+  };
+  motor('x', 330); motor('y', 392); motor('z', 494);
+  startMusic();
+}
+function motorSet(name, speed, dt, up) {
+  const m = SND.mot[name]; if (!m) return; const t = SND.ac.currentTime, k = Math.min(1, Math.abs(speed) / 70);
+  m.o.frequency.setTargetAtTime(m.f * (0.85 + 0.45 * k) * (up === true ? 1.25 : up === false ? 0.85 : 1), t, 0.06);
+  m.g.gain.setTargetAtTime(k > 0.03 ? 0.025 + 0.05 * k : 0, t, 0.05);
+  m.acc += Math.abs(speed) * dt;                         // 2mm 마다 째깍
+  if (k > 0.03 && m.acc > 2.2) { m.acc = 0; tone(m.f * 4, 0, 0.018, 'square', 0.035); }
+}
+function tone(f, t0, dur, type = 'square', vol = 0.15, f2, dest) {
+  if (!SND.ac) return; const ac = SND.ac, t = ac.currentTime + t0;
+  const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  const g = ac.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(dest || SND.master); o.start(t); o.stop(t + dur + 0.05);
+}
+function boing(f = 520, dur = 0.35, vol = 0.14) {
+  if (!SND.ac) return; const ac = SND.ac, t = ac.currentTime;
+  const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(f * 1.6, t); o.frequency.exponentialRampToValueAtTime(f * 0.6, t + dur);
+  const l = ac.createOscillator(); l.frequency.value = 22; const lg = ac.createGain(); lg.gain.value = f * 0.12; l.connect(lg).connect(o.frequency);
+  const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(SND.master); o.start(t); l.start(t); o.stop(t + dur + 0.05); l.stop(t + dur + 0.05);
+}
+const sfx = {
+  coin: () => { tone(1568, 0, 0.08, 'square', 0.1); tone(2093, 0.07, 0.3, 'square', 0.1); },
+  click: () => tone(880, 0, 0.05, 'square', 0.08),
+  start: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.06, 0.1, 'square', 0.09)),
+  clamp: () => { boing(640, 0.28, 0.16); tone(180, 0, 0.08, 'square', 0.06, 120); },
+  open: () => boing(420, 0.25, 0.12),
+  win: () => { [523, 659, 784, 1047, 0, 1047, 1319, 1568].forEach((f, i) => f && tone(f, i * 0.09, 0.2, 'square', 0.1)); [262, 330, 392].forEach((f, i) => tone(f, i * 0.27, 0.3, 'triangle', 0.12)); },
+  fail: () => { tone(392, 0, 0.3, 'square', 0.08, 370); tone(330, 0.25, 0.3, 'square', 0.08, 311); tone(262, 0.5, 0.7, 'square', 0.08, 196); },
+  slip: () => { tone(1400, 0, 0.6, 'sine', 0.12, 300); },
+  thud: () => { tone(160, 0, 0.12, 'sine', 0.2, 80); },
+  beep: () => tone(1320, 0, 0.09, 'square', 0.09),
+};
+// 배경 음악: 8비트 루프 (C 장조 펜타토닉)
+const MEL = [72, 76, 79, 76, 81, 79, 76, 74, 72, 74, 76, 79, 76, 74, 72, 0, 74, 77, 81, 77, 79, 76, 72, 74, 76, 79, 81, 84, 81, 79, 76, 0];
+const BAS = [48, 0, 55, 0, 57, 0, 55, 0, 53, 0, 55, 0, 48, 0, 43, 0];
+let musT = 0, musI = 0;
+function startMusic() {
+  setInterval(() => {
+    if (!SND.ac || !SND.music) return;
+    const ac = SND.ac, beat = 60 / 150 / 2;
+    if (musT < ac.currentTime) musT = ac.currentTime + 0.05;
+    while (musT < ac.currentTime + 0.2) {
+      const n = MEL[musI % MEL.length], b = BAS[musI % BAS.length], t0 = musT - ac.currentTime;
+      if (n) tone(440 * Math.pow(2, (n - 69) / 12), t0, beat * 0.9, 'square', 0.05, null, SND.mus);
+      if (b) tone(440 * Math.pow(2, (b - 69) / 12), t0, beat * 1.6, 'triangle', 0.09, null, SND.mus);
+      musI++; musT += beat;
+    }
+  }, 60);
+}
+// 목소리: 브라우저 음성(한국어, 높은 톤)
+let koVoice = null;
+function voice(t) {
+  if (!SND.on || !SND.voice || !('speechSynthesis' in window)) return;
+  try {
+    const u = new SpeechSynthesisUtterance(t.replace(/~/g, '').replace(/…/g, ''));
+    u.lang = 'ko-KR'; u.pitch = 1.8; u.rate = 1.12; u.volume = 0.9;
+    if (!koVoice) koVoice = speechSynthesis.getVoices().find(v => /ko/i.test(v.lang)) || null;
+    if (koVoice) u.voice = koVoice;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  } catch (_) {}
+}
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, audioInit, { capture: true }));
+
+// ───────── 3D 장면 ─────────
+const view = document.getElementById('view');
+let R3 = null;
+function canvasTex(T, w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = 4; return t; }
+function build3d() {
+  if (!window.THREE) { view.innerHTML = '<div class="err3d">3D 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.</div>'; return; }
+  const T = THREE;
+  const renderer = new T.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+  renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  view.appendChild(renderer.domElement);
+  const scene = new T.Scene();
+  // 반사용 주변 환경 (방 안 조명판) → 크롬·플라스틱이 실제처럼 비침
+  const env = new T.Scene();
+  env.add(new T.Mesh(new T.BoxGeometry(600, 400, 600), new T.MeshBasicMaterial({ color: 0x3a2030, side: T.BackSide })));
+  const lp = (c, x, y, z, w, h) => { const m = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m); };
+  lp(0xffffff, 0, 190, 0, 260, 160); lp(0xff8fb8, -280, 40, 0, 200, 160); lp(0xffe2a8, 280, 60, 0, 200, 140); lp(0xffffff, 0, 80, 280, 260, 90); lp(0x9fd8ff, 0, 40, -280, 220, 120);
+  const pm = new T.PMREMGenerator(renderer); scene.environment = pm.fromScene(env, 0.03).texture;
+  const cam = new T.PerspectiveCamera(36, 1, 5, 3000);
+  const target = new T.Vector3(110, 48, 85);
+  const orbit = { az: 0.0, el: 0.18, r: 520 };
+  // 조명
+  scene.add(new T.HemisphereLight(0xfff0f6, 0x4a2836, 0.45));
+  const sun = new T.SpotLight(0xffffff, 1.1, 0, 0.75, 0.6, 1); sun.position.set(110, 260, 120); sun.target.position.set(110, 0, 80); sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0005; scene.add(sun, sun.target);
+  const pinkL = new T.PointLight(0xff6fa5, 0.5, 300); pinkL.position.set(-5, 120, 160); scene.add(pinkL);
+  const warmL = new T.PointLight(0xffd29a, 0.5, 300); warmL.position.set(225, 120, 160); scene.add(warmL);
+  // 재질
+  const std = (o) => new T.MeshStandardMaterial(o);
+  const M = {
+    cab: std({ color: 0xe8457c, roughness: 0.32, metalness: 0.15 }), cab2: std({ color: 0xa8234f, roughness: 0.4 }),
+    chrome: std({ color: 0xf2f5f8, roughness: 0.08, metalness: 1 }), steel: std({ color: 0xa6b0bb, roughness: 0.25, metalness: 0.9 }),
+    dark: std({ color: 0x241a20, roughness: 0.5, metalness: 0.2 }), black: std({ color: 0x141014, roughness: 0.35 }),
+    hole: new T.MeshBasicMaterial({ color: 0x050304 }), yellow: std({ color: 0xffc533, roughness: 0.3, metalness: 0.3 }),
+    glass: new T.MeshPhysicalMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.1, roughness: 0.02, metalness: 0, clearcoat: 1, side: T.DoubleSide, depthWrite: false }),
+    acryl: new T.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, roughness: 0.05, clearcoat: 1, side: T.DoubleSide, depthWrite: false }),
+    shine: new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, depthWrite: false }),
+    red: new T.MeshBasicMaterial({ color: 0xff3b5c, transparent: true, opacity: 0.7 }),
+  };
+  const box = (w, h, d, m, x, y, z, cast = true, parent = scene) => { const b = new T.Mesh(new T.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = cast; b.receiveShadow = true; parent.add(b); return b; };
+  const XA = -14, XB = 234, ZA = -14, ZB = 174, TOP = 150, CX = (XA + XB) / 2, CZ = (ZA + ZB) / 2;
+  // 바닥: 폭신한 바닥재
+  const ftex = canvasTex(T, 512, 512, (g, w) => { g.fillStyle = '#ffd98a'; g.fillRect(0, 0, w, w); for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) if ((i + j) % 2) { g.fillStyle = '#ffe9b8'; g.fillRect(i * 64, j * 64, 64, 64); } for (let k = 0; k < 4000; k++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; g.fillRect(Math.random() * w, Math.random() * w, 2, 2); } });
+  ftex.wrapS = ftex.wrapT = T.RepeatWrapping; ftex.repeat.set(2.6, 2);
+  box(XB - XA, 4, ZB - ZA, std({ map: ftex, roughness: 0.95 }), CX, -1.4, CZ, false);
+  // 받침·앞 패널·조작대
+  box(XB - XA + 16, 76, ZB - ZA + 16, M.cab, CX, -42, CZ);
+  box(XB - XA + 18, 5, ZB - ZA + 18, M.cab2, CX, -3.6, CZ);
+  const ptex = canvasTex(T, 1024, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ff6f9f'); gr.addColorStop(1, '#c42a62'); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = '#ffd04d'; g.font = 'bold 110px Jua, sans-serif'; g.textAlign = 'center'; g.fillText('GEN CLAW', w / 2, 150); g.fillStyle = '#fff'; g.font = '44px Jua, sans-serif'; g.fillText('한 판 500원 · 학습 랙 XYZ 래더 구동', w / 2, 215); });
+  const fp = new T.Mesh(new T.PlaneGeometry(XB - XA + 16, 50), std({ map: ptex, roughness: 0.4 })); fp.position.set(CX, -55, ZB + 8.1); scene.add(fp);
+  const deck = new T.Group(); deck.position.set(0, -14, ZB + 8); scene.add(deck);
+  const dk = box(XB - XA + 16, 7, 34, M.cab2, CX, 0, 15, true, deck); dk.rotation.x = 0.18;
+  const stick = new T.Group(); stick.position.set(70, 4, 16); deck.add(stick);
+  box(16, 2, 16, M.black, 0, 0, 0, true, stick);
+  const shaft = new T.Group(); stick.add(shaft);
+  const sh = new T.Mesh(new T.CylinderGeometry(1.1, 1.1, 14, 12), M.chrome); sh.position.y = 7; shaft.add(sh);
+  const ballK = new T.Mesh(new T.SphereGeometry(4.5, 24, 16), std({ color: 0xff2d55, roughness: 0.25 })); ballK.position.y = 15; ballK.castShadow = true; shaft.add(ballK);
+  const btnG = new T.Group(); btnG.position.set(150, 4, 16); deck.add(btnG);
+  const ring = new T.Mesh(new T.CylinderGeometry(9, 9, 2, 32), M.chrome); btnG.add(ring);
+  const btn = new T.Mesh(new T.CylinderGeometry(7.2, 7.2, 4, 32), std({ color: 0xff3b2f, roughness: 0.2, emissive: 0x550000 })); btn.position.y = 2.5; btnG.add(btn);
+  const slot = box(16, 22, 2, M.chrome, 210, -30, ZB + 9.2); box(2, 12, 2.5, M.black, 210, -28, ZB + 9.5);
+  // 기둥·벽·유리
+  for (const [x, z] of [[XA, ZA], [XB, ZA], [XA, ZB], [XB, ZB]]) { box(8, TOP, 8, M.cab, x, TOP / 2, z); box(9, 3, 9, M.chrome, x, 2, z); }
+  const wtex = canvasTex(T, 512, 256, (g, w, h) => { g.fillStyle = '#ffd3e2'; g.fillRect(0, 0, w, h); for (let i = 0; i < 60; i++) { g.fillStyle = ['#ffffff88', '#ff9cbd88', '#ffe08a88', '#9fd8ff88'][i % 4]; const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 10; g.beginPath(); for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5 - Math.PI / 2, rr = k % 2 ? r * 0.45 : r; g.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); } g.fill(); } });
+  const back = new T.Mesh(new T.PlaneGeometry(XB - XA, TOP), std({ map: wtex, roughness: 0.85 })); back.position.set(CX, TOP / 2, ZA); back.receiveShadow = true; scene.add(back);
+  const left = new T.Mesh(new T.PlaneGeometry(ZB - ZA, TOP), std({ map: wtex, roughness: 0.85 })); left.rotation.y = Math.PI / 2; left.position.set(XA, TOP / 2, CZ); left.receiveShadow = true; scene.add(left);
+  const right = new T.Mesh(new T.PlaneGeometry(ZB - ZA, TOP), M.glass); right.rotation.y = -Math.PI / 2; right.position.set(XB, TOP / 2, CZ); right.renderOrder = 6; scene.add(right);
+  const g1 = new T.Mesh(new T.PlaneGeometry(XB - XA, TOP), M.glass); g1.position.set(CX, TOP / 2, ZB); g1.renderOrder = 6; scene.add(g1);
+  for (const [x, w] of [[30, 26], [62, 9], [190, 18]]) { const s = new T.Mesh(new T.PlaneGeometry(w, TOP * 1.2), M.shine); s.position.set(x, TOP / 2, ZB + 0.3); s.rotation.z = 0.5; s.renderOrder = 7; scene.add(s); }
+  // 지붕·간판·전구
+  box(XB - XA + 16, 28, ZB - ZA + 16, M.cab, CX, TOP + 14, CZ);
+  const mq = canvasTex(T, 1024, 128, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ff8ab2'); gr.addColorStop(1, '#c42a62'); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = '86px Jua, sans-serif'; g.textAlign = 'center'; g.shadowColor = '#7a1036'; g.shadowBlur = 8; g.fillText('인형 뽑기 · XYZ', w / 2, 94); });
+  const sign = new T.Mesh(new T.PlaneGeometry(XB - XA + 6, 22), new T.MeshBasicMaterial({ map: mq, toneMapped: false })); sign.position.set(CX, TOP + 14, ZB + 8.2); scene.add(sign);
+  const bulbs = [];
+  for (let i = 0; i <= 22; i++) { const b = new T.Mesh(new T.SphereGeometry(2.2, 12, 8), std({ color: 0xfff0b0, emissive: 0xffc533, emissiveIntensity: 1 })); b.position.set(XA - 6 + i * (XB - XA + 12) / 22, TOP + 29.5, ZB + 8.4); scene.add(b); bulbs.push(b); }
+  // 출구
+  const c = CHUTE;
+  const hole = new T.Mesh(new T.PlaneGeometry(c.x1 - c.x0, c.y1 - c.y0), M.hole); hole.rotation.x = -Math.PI / 2; hole.position.set((c.x0 + c.x1) / 2, 0.9, (c.y0 + c.y1) / 2); scene.add(hole);
+  box(c.x1 - c.x0, 24, 1.2, M.acryl, (c.x0 + c.x1) / 2, 12, c.y1, false).renderOrder = 4;
+  box(1.2, 24, c.y1 - c.y0, M.acryl, c.x1, 12, (c.y0 + c.y1) / 2, false).renderOrder = 4;
+  box(c.x1 - c.x0 + 2, 2, 2, M.yellow, (c.x0 + c.x1) / 2, 24, c.y1); box(2, 2, c.y1 - c.y0 + 2, M.yellow, c.x1, 24, (c.y0 + c.y1) / 2);
+  const lbl = new T.Sprite(new T.SpriteMaterial({ map: canvasTex(T, 256, 96, (g) => { g.fillStyle = '#ffc533'; g.font = '72px Jua, sans-serif'; g.textAlign = 'center'; g.fillText('출구', 128, 76); }), depthTest: false }));
+  lbl.scale.set(30, 11, 1); lbl.position.set(17, 36, 17); lbl.renderOrder = 9; scene.add(lbl);
+  // 갠트리
+  box(6, 6, ZB - ZA, M.steel, -6, RAIL + 4, CZ); box(6, 6, ZB - ZA, M.steel, 226, RAIL + 4, CZ);
+  const bridge = new T.Group(); scene.add(bridge);
+  const bm = new T.Mesh(new T.BoxGeometry(240, 5, 9), M.steel); bm.position.set(110, RAIL + 1, 0); bm.castShadow = true; bridge.add(bm);
+  for (const x of [-6, 226]) { const e = new T.Mesh(new T.BoxGeometry(10, 9, 14), M.dark); e.position.set(x, RAIL + 3, 0); bridge.add(e); }
+  const trolley = new T.Group(); bridge.add(trolley);
+  const tb = new T.Mesh(new T.BoxGeometry(18, 10, 16), M.cab); tb.position.y = RAIL - 6; tb.castShadow = true; trolley.add(tb);
+  const mot = new T.Mesh(new T.CylinderGeometry(4.5, 4.5, 12, 18), M.dark); mot.rotation.z = Math.PI / 2; mot.position.set(0, RAIL - 4, 9); trolley.add(mot);
+  const reel = new T.Mesh(new T.CylinderGeometry(4, 4, 8, 18), M.chrome); reel.rotation.z = Math.PI / 2; reel.position.set(0, RAIL - 12, 0); trolley.add(reel);
+  const pend = new T.Group(); pend.position.set(0, RAIL - 14, 0); trolley.add(pend);
+  const cable = new T.Mesh(new T.CylinderGeometry(0.55, 0.55, 1, 8), M.black); pend.add(cable);
+  const clawG = new T.Group(); clawG.scale.setScalar(1.3); pend.add(clawG);
+  const dome = new T.Mesh(new T.SphereGeometry(7.5, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), M.cab); dome.position.y = 4; clawG.add(dome);
+  const body = new T.Mesh(new T.CylinderGeometry(7.5, 8.5, 8, 28), M.chrome); clawG.add(body);
+  const cring = new T.Mesh(new T.TorusGeometry(8.6, 1.3, 12, 32), M.steel); cring.rotation.x = Math.PI / 2; cring.position.y = -4; clawG.add(cring);
+  const hook = new T.Mesh(new T.TorusGeometry(2, 0.6, 8, 16), M.chrome); hook.position.y = 12.5; clawG.add(hook);
+  [body, dome, cring].forEach(m => m.castShadow = true);
+  const prongs = [];
+  for (let k = 0; k < 3; k++) {
+    const a = k * Math.PI * 2 / 3 + Math.PI / 6;
+    const root = new T.Group(); root.position.set(7.2 * Math.cos(a), -4.5, 7.2 * Math.sin(a)); root.rotation.y = -a; clawG.add(root);
+    const hinge = new T.Group(); root.add(hinge);
+    const pin = new T.Mesh(new T.CylinderGeometry(1.5, 1.5, 4.5, 12), M.steel); pin.rotation.x = Math.PI / 2; hinge.add(pin);
+    const upper = new T.Mesh(new T.BoxGeometry(2.6, 11, 3.4), M.chrome); upper.position.set(0, -5.5, 0); upper.castShadow = true; hinge.add(upper);
+    const knee = new T.Group(); knee.position.set(0, -11, 0); hinge.add(knee);
+    const kp = new T.Mesh(new T.CylinderGeometry(1.7, 1.7, 4.2, 12), M.steel); kp.rotation.x = Math.PI / 2; knee.add(kp);
+    const curve = new T.CatmullRomCurve3([new T.Vector3(0, 0, 0), new T.Vector3(0.6, -4, 0), new T.Vector3(-0.6, -8, 0), new T.Vector3(-3.4, -10.5, 0), new T.Vector3(-5.6, -11.2, 0)]);
+    const lower = new T.Mesh(new T.TubeGeometry(curve, 24, 1.25, 10, false), M.chrome); lower.castShadow = true; knee.add(lower);
+    const pad = new T.Mesh(new T.SphereGeometry(1.7, 12, 10), M.black); pad.scale.set(1.3, 0.8, 1.3); pad.position.set(-5.8, -11.2, 0); knee.add(pad);
+    prongs.push({ hinge, knee });
+  }
+  const aim = new T.Mesh(new T.RingGeometry(6, 8, 32), M.red); aim.rotation.x = -Math.PI / 2; scene.add(aim);
+  // ───── 상품 모델 ─────
+  const plush = (col) => std({ color: col, roughness: 1, metalness: 0 });
+  const shiny = (col) => new T.MeshPhysicalMaterial({ color: col, roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.2 });
+  const eyeM = new T.MeshPhysicalMaterial({ color: 0x120c10, roughness: 0.1, clearcoat: 1 }), cheekM = plush(0xff7f9f), creamM = plush(0xfff1dc), beakM = plush(0xff9a1f);
+  const ballTex = canvasTex(T, 256, 128, (g, w, h) => { const cs = ['#ff4d6d', '#ffffff', '#3fa7ff', '#ffffff', '#ffd23f', '#ffffff']; cs.forEach((cc, i) => { g.fillStyle = cc; g.fillRect(i * w / 6, 0, w / 6 + 1, h); }); });
+  const diceTex = canvasTex(T, 128, 128, (g, w) => { g.fillStyle = '#fffaf2'; g.fillRect(0, 0, w, w); g.fillStyle = '#e8384f'; [[64, 64], [34, 34], [94, 94]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 11, 0, 7); g.fill(); }); });
+  function makeItem(d) {
+    const g = new T.Group(), r = d.r, S = (rr, mat, x, y, z, sx = 1, sy = 1, sz = 1) => { const s = new T.Mesh(new T.SphereGeometry(rr, 22, 16), mat); s.position.set(x, y, z); s.scale.set(sx, sy, sz); s.castShadow = true; s.receiveShadow = true; g.add(s); return s; };
+    const eyes = (y, z, s = 0.11, sp = 0.34) => { S(r * s, eyeM, -r * sp, y, z); S(r * s, eyeM, r * sp, y, z); };
+    const k = d.kind;
+    if (k === 'bear') {
+      const fur = plush(d.col), cream = creamM;
+      S(r * 0.62, fur, 0, -r * 0.3, 0, 1, 1.05, 0.95); S(r * 0.42, cream, 0, -r * 0.32, r * 0.36, 1, 1.1, 0.5);        // 몸·배
+      S(r * 0.5, fur, 0, r * 0.45, r * 0.05);                                                                           // 머리
+      S(r * 0.18, fur, -r * 0.36, r * 0.82, 0); S(r * 0.18, fur, r * 0.36, r * 0.82, 0); S(r * 0.1, cream, -r * 0.36, r * 0.82, r * 0.08); S(r * 0.1, cream, r * 0.36, r * 0.82, r * 0.08);
+      S(r * 0.2, cream, 0, r * 0.33, r * 0.47, 1, 0.8, 0.7); S(r * 0.07, eyeM, 0, r * 0.4, r * 0.62); eyes(r * 0.55, r * 0.45, 0.07, 0.18);
+      S(r * 0.2, fur, -r * 0.55, -r * 0.18, r * 0.2, 0.8, 1.3, 0.8); S(r * 0.2, fur, r * 0.55, -r * 0.18, r * 0.2, 0.8, 1.3, 0.8);   // 팔
+      S(r * 0.24, fur, -r * 0.32, -r * 0.82, r * 0.32); S(r * 0.24, fur, r * 0.32, -r * 0.82, r * 0.32);                           // 다리
+      const bow = std({ color: 0xff3355, roughness: 0.6 }); for (const s of [-1, 1]) { const cn = new T.Mesh(new T.ConeGeometry(r * 0.1, r * 0.2, 12), bow); cn.rotation.z = s * Math.PI / 2; cn.position.set(s * r * 0.1, r * 0.08, r * 0.42); g.add(cn); }
+    } else if (k === 'duck') {
+      const m = shiny(0xffd21f);
+      S(r * 0.85, m, 0, -r * 0.2, 0, 1.25, 0.75, 1); S(r * 0.55, m, 0, r * 0.45, r * 0.25);
+      S(r * 0.3, shiny(0xff7a00), 0, r * 0.36, r * 0.75, 1, 0.4, 0.9); eyes(r * 0.6, r * 0.62, 0.08, 0.22); S(r * 0.3, m, 0, -r * 0.05, -r * 0.85, 0.6, 1.2, 0.5);
+    } else if (k === 'robot') {
+      const m = std({ color: d.col, roughness: 0.35, metalness: 0.6 }), dk = std({ color: 0x30343c, roughness: 0.4, metalness: 0.5 });
+      const b2 = (w, h, dd, mat, x, y, z) => { const b = new T.Mesh(new T.BoxGeometry(w, h, dd), mat); b.position.set(x, y, z); b.castShadow = true; g.add(b); return b; };
+      b2(r * 1.1, r * 0.9, r * 0.8, m, 0, -r * 0.4, 0); b2(r * 0.9, r * 0.7, r * 0.75, m, 0, r * 0.42, 0); b2(r * 0.7, r * 0.3, 0.3, dk, 0, r * 0.45, r * 0.38);
+      const eyeG = std({ color: 0x7ff6ff, emissive: 0x33e0ff, emissiveIntensity: 1.2 }); S(r * 0.09, eyeG, -r * 0.17, r * 0.45, r * 0.41); S(r * 0.09, eyeG, r * 0.17, r * 0.45, r * 0.41);
+      const ant = new T.Mesh(new T.CylinderGeometry(0.5, 0.5, r * 0.35, 8), dk); ant.position.y = r * 0.95; g.add(ant); S(r * 0.1, std({ color: 0xff3b5c, emissive: 0xff2040 }), 0, r * 1.15, 0);
+      b2(r * 0.22, r * 0.7, r * 0.3, dk, -r * 0.68, -r * 0.4, 0); b2(r * 0.22, r * 0.7, r * 0.3, dk, r * 0.68, -r * 0.4, 0);
+      for (let i = 0; i < 3; i++) S(r * 0.06, std({ color: [0xff5a5a, 0xffd23f, 0x5aff8a][i] }), (i - 1) * r * 0.22, -r * 0.35, r * 0.41);
+    } else if (k === 'ball') {
+      const s = new T.Mesh(new T.SphereGeometry(r, 32, 20), new T.MeshPhysicalMaterial({ map: ballTex, roughness: 0.3, clearcoat: 1 })); s.castShadow = true; g.add(s);
+    } else if (k === 'gift') {
+      const b = new T.Mesh(new T.BoxGeometry(r * 1.5, r * 1.5, r * 1.5), std({ color: d.col, roughness: 0.5 })); b.castShadow = true; g.add(b);
+      const rib = std({ color: 0xffd23f, roughness: 0.35, metalness: 0.3 });
+      for (const [w, dd] of [[r * 0.3, r * 1.52], [r * 1.52, r * 0.3]]) { const rb = new T.Mesh(new T.BoxGeometry(w, r * 1.52, dd), rib); g.add(rb); }
+      for (const s of [-1, 1]) { const t = new T.Mesh(new T.TorusGeometry(r * 0.25, r * 0.08, 8, 16), rib); t.position.set(s * r * 0.22, r * 0.85, 0); t.rotation.y = Math.PI / 2; t.rotation.x = s * 0.6; g.add(t); }
+    } else if (k === 'dice') {
+      const b = new T.Mesh(new T.BoxGeometry(r * 1.5, r * 1.5, r * 1.5), new T.MeshPhysicalMaterial({ map: diceTex, roughness: 0.3, clearcoat: 0.6 })); b.castShadow = true; g.add(b);
+    } else {   // 토끼·병아리·고양이 봉제인형
+      const m = plush(d.col);
+      S(r, m, 0, 0, 0, 1, 0.92, 1); S(r * 0.4, m, -r * 0.6, -r * 0.62, r * 0.35); S(r * 0.4, m, r * 0.6, -r * 0.62, r * 0.35);
+      if (k === 'bunny') { S(r * 0.26, m, -r * 0.4, r * 1.2, 0, 0.8, 2.2, 0.7).rotation.z = 0.15; S(r * 0.26, m, r * 0.4, r * 1.2, 0, 0.8, 2.2, 0.7).rotation.z = -0.15; S(r * 0.14, plush(0xffb3c6), -r * 0.4, r * 1.2, r * 0.12, 0.6, 1.8, 0.4); S(r * 0.14, plush(0xffb3c6), r * 0.4, r * 1.2, r * 0.12, 0.6, 1.8, 0.4); S(r * 0.1, cheekM, 0, -r * 0.08, r * 0.96); }
+      if (k === 'cat') { for (const s of [-1, 1]) { const e = new T.Mesh(new T.ConeGeometry(r * 0.3, r * 0.55, 4), m); e.position.set(s * r * 0.55, r * 0.85, 0); e.rotation.z = -s * 0.35; e.castShadow = true; g.add(e); } S(r * 0.1, cheekM, 0, -r * 0.05, r * 0.98); }
+      if (k === 'chick') { const b = new T.Mesh(new T.ConeGeometry(r * 0.16, r * 0.4, 12), beakM); b.rotation.x = Math.PI / 2; b.position.set(0, -r * 0.05, r * 1.05); g.add(b); S(r * 0.22, m, 0, r * 0.98, 0, 0.6, 1, 0.6); }
+      eyes(r * 0.18, r * 0.9); S(r * 0.15, cheekM, -r * 0.62, -r * 0.08, r * 0.74, 1, 0.6, 0.5); S(r * 0.15, cheekM, r * 0.62, -r * 0.08, r * 0.74, 1, 0.6, 0.5);
+    }
+    g.rotation.set(d.tx, d.yaw, d.tz); scene.add(g); return g;
+  }
+  // 드래그로 둘러보기
+  let drag = null;
+  view.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, az: orbit.az, el: orbit.el }; view.setPointerCapture(e.pointerId); view.style.cursor = 'grabbing'; });
+  view.addEventListener('pointermove', e => { if (!drag) return; orbit.az = Math.max(-0.9, Math.min(0.9, drag.az - (e.clientX - drag.x) * 0.006)); orbit.el = Math.max(0.04, Math.min(1.0, drag.el + (e.clientY - drag.y) * 0.004)); });
+  const up = () => { drag = null; view.style.cursor = 'grab'; };
+  view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+  function size() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); orbit.r = 540 * Math.max(1, 1.45 / cam.aspect); }
+  new ResizeObserver(size).observe(view); size();
+  R3 = { T, renderer, scene, cam, target, orbit, bridge, trolley, pend, cable, clawG, prongs, aim, bulbs, makeItem, shaft, btn };
+}
+
+// 진자 흔들림 (래더 축 가속도로)
+const sway = { ax: 0, vx: 0, az: 0, vz: 0, px: 0, py: 0, vpx: 0, vpy: 0 };
+function swayStep(dt, L) {
+  const x = AX[0].pos, y = AX[1].pos;
+  const vx = (x - sway.px) / dt, vy = (y - sway.py) / dt; sway.px = x; sway.py = y;
+  const accx = (vx - sway.vpx) / dt, accy = (vy - sway.vpy) / dt; sway.vpx = vx; sway.vpy = vy;
+  const Lc = Math.max(25, L), w2 = 9810 / Lc, c = 3.2, cl = a => Math.max(-3000, Math.min(3000, a));
+  sway.vx += (-w2 * sway.ax - c * sway.vx - cl(accx) / Lc) * dt; sway.ax += sway.vx * dt;
+  sway.vz += (-w2 * sway.az - c * sway.vz - cl(accy) / Lc) * dt; sway.az += sway.vz * dt;
+  sway.ax = Math.max(-0.35, Math.min(0.35, sway.ax)); sway.az = Math.max(-0.35, Math.min(0.35, sway.az));
+  return [vx, vy];
+}
+
+// ───────── 상품 배치·쌓임 ─────────
+const COLS = { bear: [0xb07a4a, 0x8a5a36, 0xf2e6d8, 0xffb6c8], bunny: [0xffffff, 0xffc9da, 0xd8c8ff], chick: [0xffe066], cat: [0xffb37a, 0xd9d9d9, 0x8ecbff], robot: [0x9fb8d6, 0xffa94d, 0x8ee0b0], gift: [0x4d8dff, 0xff4d8d, 0x7a4dff], ball: [0xffffff], duck: [0xffd21f], dice: [0xffffff] };
+function newItem(kind, x, y) {
+  const K = KIND[kind], s = rnd(0.9, 1.1);
+  const d = { kind, name: K.name, r: K.r * s, grip: K.grip, half: K.half * K.r * s, x, y, h: 0, vh: 0, yaw: rnd(-0.6, 0.6), tx: rnd(-0.15, 0.15), tz: rnd(-0.15, 0.15), col: pick(COLS[kind]) };
+  if (kind === 'ball' || kind === 'dice') { d.yaw = rnd(0, 6.3); d.tx = rnd(0, 6.3); d.tz = rnd(0, 6.3); }
+  return d;
+}
+function restOf(d) {
+  let rest = d.half;
+  for (const o of items) {
+    if (o === d || o === claw.held || o.inChute) continue;
+    const dist = Math.hypot(o.x - d.x, o.y - d.y);
+    if (dist < (o.r + d.r) * 0.72 && o.h < d.h - 0.5) rest = Math.max(rest, o.h + o.half * 0.8 + d.half * 0.75);
+  }
+  return rest;
+}
+function refill() {
+  items.forEach(d => R3 && R3.scene.remove(d.g));
+  items = []; let tries = 0;
+  while (items.length < 15 && tries++ < 900) {
+    const d = newItem(pick(BAG), rnd(46, 212), rnd(18, 152));
+    if (items.every(o => Math.hypot(o.x - d.x, o.y - d.y) > (o.r + d.r) * 0.92)) { d.h = d.half; items.push(d); }
+  }
+  for (let i = 0; i < 7; i++) {          // 위층: 아래 인형 사이에 걸쳐 놓기
+    const a = pick(items.filter(o => o.h < o.half + 1)), b2 = newItem(pick(BAG), a.x + rnd(-5, 5), a.y + rnd(-5, 5));
+    b2.x = Math.max(44, Math.min(214, b2.x)); b2.y = Math.max(16, Math.min(154, b2.y)); b2.h = 60; items.push(b2);
+  }
+  for (let k = 0; k < 400; k++) items.forEach(d => { const r = restOf(d); if (d.h > r) d.h = Math.max(r, d.h - 1); });
+  items.forEach(d => { d.h = restOf(d); if (R3) d.g = R3.makeItem(d); });
+}
+
+// ───────── 래더 실행 + 게임 ─────────
+const DT = 0.004; let scans = 0, last = performance.now();
+setB('X0', 1); setB('X1', 1);
+const PULSES = new Map();   // 장치 → 끝나는 스캔 번호 (느린 PC 에서도 래더가 꼭 보도록)
+function step() { for (const p of PROGRAMS) runProg(p, DT); firstScan = false; qd75(DT); scans++; for (const [d, end] of PULSES) if (scans >= end) { setB(d, 0); PULSES.delete(d); } }
+function pulse(dev, ms = 150) { setB(dev, 1); PULSES.set(dev, scans + Math.max(12, Math.round(ms / 4))); }
+function grabDepth(x, y) {     // 쌓인 높이까지만 내려감 (진짜 기계처럼 닿으면 멈춤)
+  let top = 0;
+  items.forEach(d => { if (d.inChute || d === claw.held) return; if (Math.hypot(d.x - x, d.y - y) < d.r * 0.9 + 3) top = Math.max(top, d.h + d.half * 0.15); });
+  const tip = Math.max(5, top - 3);
+  return Math.max(5, Math.min(57, 62 - tip));
+}
+function setPoints() {
+  const x = AX[0].pos, y = AX[1].pos;
+  const P2 = [[x, y, grabDepth(x, y)], [17, 17, 5]];
+  P2.forEach((p, k) => p.forEach((v, j) => sD(3500 + 6 * k + 2 * j, v)));
+  D[3150] = 2; D[3161] = 1; D[3158] = 6; sD(3550, 8); D[3552] = 4000; D[3554] = 2400;
+}
+function startGrab(auto) {
+  if (phase !== 'aim') return;
+  phase = 'run'; credits = Math.max(0, credits - 1); claw.str = rnd(0.72, 1.12); claw.won = false; slip2 = false;
+  setPoints(); setB('M3016', 1); sfx.start(); pressT = 0.25;
+  ['M3020', 'M3021', 'M3022', 'M3023'].forEach(d => setB(d, 0));
+  if (auto) say(pick(LINES.time));
+  pulse('M3012');
+}
+let prevStep = 0, prevRun = 0, pressT = 0;
+function game(dt) {
+  const sa = D[3170], pt = D[3160], run = getB('M3060');
+  if (sa === 40 && prevStep !== 40) {
+    if (pt === 1) { claw.target = 0; sfx.clamp(); setTimeout(tryGrab, 280); }
+    if (pt === 2) { claw.target = 1; sfx.open(); release(); }
+  }
+  if (sa === 50 && claw.held && !claw.slipChecked) { claw.slipChecked = true; slipT = rnd(0.25, 0.75); }
+  if (sa === 21 && claw.held && !slip2 && pt === 2) { slip2 = true; if (Math.random() < claw.held.slip * 0.35) slipT = rnd(0.2, 0.9); }
+  if (slipT > 0) { slipT -= dt; if (slipT <= 0 && claw.held && Math.random() < claw.held.slip + 0.25) { release(); say(pick(LINES.slip)); sfx.slip(); } }
+  if (prevRun && !run && phase === 'run') {
+    setB('M3016', 0); phase = credits > 0 ? 'aim' : 'idle'; timeLeft = 20; lastBeep = 99; claw.target = 1;
+    if (claw.held) release();
+    if (!claw.won) { sfx.fail(); if (toastT <= 0) say(pick(LINES.fail)); }
+  }
+  prevStep = sa; prevRun = run;
+  claw.open += Math.sign(claw.target - claw.open) * Math.min(Math.abs(claw.target - claw.open), dt * 3.5);
+  // 떨어짐·쌓임
+  items.forEach(d => {
+    if (d === claw.held) return;
+    const inC = d.x > CHUTE.x0 + 3 && d.x < CHUTE.x1 - 3 && d.y > CHUTE.y0 + 3 && d.y < CHUTE.y1 - 3;
+    const rest = d.inChute ? -999 : restOf(d);
+    if (d.h > rest + 0.05) { d.vh -= 900 * dt; d.h += d.vh * dt; d.falling = true; if (d.spin) { d.tx += d.spin * dt; } }
+    if (!d.inChute && d.h <= rest) {
+      if (inC && rest <= d.half + 0.1) { d.inChute = true; wins++; got.push(d.name); claw.won = true; say(pick(LINES.win(d.name))); sfx.win(); }
+      else { if (d.falling && d.vh < -90) sfx.thud(); d.h = rest; d.vh = 0; d.falling = false; d.spin = 0; }
+    }
+  });
+  items = items.filter(d => { if (d.inChute && d.h < -70) { R3 && R3.scene.remove(d.g); return false; } return true; });
+  if (phase === 'aim') {
+    timeLeft -= dt;
+    const s = Math.ceil(timeLeft); if (s <= 5 && s !== lastBeep && s > 0) { lastBeep = s; sfx.beep(); }
+    if (timeLeft <= 0) { timeLeft = 0; startGrab(true); }
+  }
+  if (pressT > 0) pressT -= dt;
+  if (toastT > 0) { toastT -= dt; if (toastT <= 0) document.getElementById('toast').classList.remove('show'); }
+}
+function tryGrab() {
+  const x = AX[0].pos, y = AX[1].pos, th = tipH(AX[2].pos);
+  let best = null, bd = 1e9;
+  items.forEach(d => {                          // 집게 높이 안에 있는 것 중 가장 위
+    if (d.inChute || d.falling) return; const dd = Math.hypot(d.x - x, d.y - y);
+    if (dd > d.r + 3) return; if (d.h - d.half > th + 18 || d.h + d.half < th - 2) return;
+    if (!best || d.h > best.h + 2 || (Math.abs(d.h - best.h) <= 2 && dd < bd)) { best = d; bd = dd; }
+  });
+  if (!best) { say(pick(LINES.air)); return; }
+  const center = Math.max(0, 1 - bd / (best.r + 3));
+  const chance = (0.15 + 0.85 * center) * best.grip * claw.str + 0.08;
+  if (Math.random() < chance) { claw.held = best; claw.slipChecked = false; best.slip = Math.min(0.55, (1 - best.grip) * 0.6 + bd * 0.03 + (1.1 - claw.str) * 0.3); say(pick(LINES.hold), false); toast(pick(LINES.hold)); }
+  else { best.x += (best.x - x) * 0.45 + rnd(-2, 2); best.y += (best.y - y) * 0.45 + rnd(-2, 2); best.x = Math.max(36, Math.min(218, best.x)); best.y = Math.max(14, Math.min(156, best.y)); best.yaw += rnd(-0.8, 0.8); say(pick(LINES.graze)); }
+}
+function release() { const d = claw.held; claw.held = null; if (d) { d.vh = 0; d.falling = true; d.spin = rnd(-2, 2); } }
+
+// ───────── 그리기 ─────────
+let lastZ = 0, blinkT = 0;
+function render(dt) {
+  if (!R3) return;
+  const { T, cam, target, orbit, bridge, trolley, pend, cable, clawG, prongs, aim, bulbs, shaft, btn } = R3;
+  const x = AX[0].pos, y = AX[1].pos, z = AX[2].pos;
+  bridge.position.z = y; trolley.position.x = x;
+  const hubY = tipH(z) + PRONG, L = (RAIL - 14) - (hubY + 17);
+  const [vx, vy] = swayStep(Math.max(dt, 1e-3), L);
+  pend.rotation.z = -sway.ax; pend.rotation.x = sway.az;
+  cable.scale.y = Math.max(1, L); cable.position.y = -L / 2; clawG.position.y = -L - 17;
+  const o = claw.open;
+  prongs.forEach(p => { p.hinge.rotation.z = 0.12 + o * 0.5; p.knee.rotation.z = -0.15 - o * 0.25; });
+  aim.position.set(x, 0.5, y); aim.visible = phase === 'aim';
+  // 조작대: 조이스틱 기울기, 버튼 눌림
+  const jx = getB('M3020') - getB('M3021'), jy = getB('M3022') - getB('M3023');
+  shaft.rotation.z += (-jx * 0.4 - shaft.rotation.z) * Math.min(1, dt * 14); shaft.rotation.x += (jy * 0.4 - shaft.rotation.x) * Math.min(1, dt * 14);
+  btn.position.y = pressT > 0 ? 1.2 : 2.5;
+  R3.scene.updateMatrixWorld();
+  items.forEach(d => {
+    if (d === claw.held) { const v = new T.Vector3(0, -PRONG / 1.3 + 2 - d.half * 0.35, 0); clawG.localToWorld(v); d.g.position.copy(v); d.x = x; d.y = y; d.h = v.y; }
+    else d.g.position.set(d.x, d.h, d.y);
+    d.g.rotation.set(d.tx, d.yaw, d.tz);
+  });
+  blinkT += dt; bulbs.forEach((b, i) => b.material.emissiveIntensity = ((Math.floor(blinkT * (phase === 'run' ? 9 : 2.5)) + i) % 2) ? 1.6 : 0.2);
+  cam.position.set(target.x + orbit.r * Math.sin(orbit.az) * Math.cos(orbit.el), target.y + orbit.r * Math.sin(orbit.el), target.z + orbit.r * Math.cos(orbit.az) * Math.cos(orbit.el));
+  cam.lookAt(target);
+  R3.renderer.render(R3.scene, cam);
+  if (SND.ac && SND.on) { const vz = (z - lastZ) / Math.max(dt, 1e-3); motorSet('x', vx, dt); motorSet('y', vy, dt); motorSet('z', vz, dt, vz < -1 ? true : vz > 1 ? false : undefined); }
+  lastZ = z;
+}
+function loop(now) {
+  const el = Math.min(0.1, (now - last) / 1000); last = now;
+  const n = Math.round(el / DT);
+  try { for (let i = 0; i < n; i++) step(); } catch (e) { toast('래더 오류: ' + e.message); throw e; }
+  game(el); render(el); ui();
+  requestAnimationFrame(loop);
+}
+
+// ───────── 화면 ─────────
+const $ = id => document.getElementById(id);
+const LAMPS = [['M3005', '운전 가능'], ['Y61', '서보 ON'], ['M3040', '원점 완료'], ['M3101', '원점 복귀 중', 'amb'], ['M3064', '수동(조이스틱)'], ['M3060', '자동(뽑는 중)'], ['M3071', 'Z 내려감 경고', 'red'], ['M3075', '중알람', 'red'], ['X6C', 'X BUSY', 'amb']];
+$('lamps').innerHTML = LAMPS.map(([d, t, c]) => `<div class="lamp ${c || ''}" data-d="${d}" title="${d}">${t}</div>`).join('');
+const ALM = { 1400: 'X축 서보 에러', 1401: 'Y축 서보 에러', 1402: 'Z축 서보 에러', 1403: '비상 정지', 1404: '도어 열림', 1410: 'X 기동 무응답', 1411: 'Y 기동 무응답', 1412: 'Z 기동 무응답', 1420: 'X 이동 시간 초과', 1421: 'Y 이동 시간 초과', 1422: 'Z 이동 시간 초과', 1423: '원점 복귀 시간 초과' };
+const AUTO_T = { 0: '대기', 10: 'Z 올림', 11: 'Z 올림', 20: 'XY 이동', 21: 'XY 이동', 30: 'Z 내림', 31: 'Z 내림', 40: '머묾(집게)', 50: 'Z 올림', 51: 'Z 올림', 60: '다음 점' };
+const fD = n => { fbuf.setInt16(0, D[n], true); fbuf.setInt16(2, D[n + 1], true); return fbuf.getFloat32(0, true); };
+const sD = (n, x) => { fbuf.setFloat32(0, x, true); D[n] = fbuf.getInt16(0, true); D[n + 1] = fbuf.getInt16(2, true); };
+const KEYMAP = { ArrowRight: 'M3020', ArrowLeft: 'M3021', ArrowDown: 'M3022', ArrowUp: 'M3023' };
+const canMove = () => phase === 'aim';
+document.querySelectorAll('.dir').forEach(b => {
+  const d = b.dataset.mom;
+  const on = e => { e.preventDefault(); if (!canMove()) return; setB(d, 1); b.classList.add('held'); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
+  const off = () => { setB(d, 0); b.classList.remove('held'); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+});
+addEventListener('keydown', e => {
+  if (KEYMAP[e.key]) { e.preventDefault(); if (canMove()) setB(KEYMAP[e.key], 1); }
+  if (e.key === ' ' && (e.target === document.body || e.target.classList.contains('dir'))) { e.preventDefault(); startGrab(); }
+});
+addEventListener('keyup', e => { if (KEYMAP[e.key]) setB(KEYMAP[e.key], 0); });
+$('coin').addEventListener('click', () => { credits++; sfx.coin(); say(pick(LINES.coin)); });
+$('grab').addEventListener('click', () => startGrab(false));
+$('reset').addEventListener('click', () => { sfx.click(); pulse('M3011', 200); });
+$('home').addEventListener('click', () => { sfx.click(); setB('M3016', 0); pulse('M3014'); phase = 'homing'; });
+$('estop').addEventListener('click', e => { const p = getB('X0'); setB('X0', !p); e.currentTarget.setAttribute('aria-pressed', p ? 'true' : 'false'); });
+$('refill').addEventListener('click', () => { sfx.click(); refill(); });
+$('snd').addEventListener('click', e => { SND.on = !SND.on; e.currentTarget.setAttribute('aria-pressed', SND.on); if (SND.master) SND.master.gain.setTargetAtTime(SND.on ? 0.8 : 0, SND.ac.currentTime, 0.05); if (!SND.on && 'speechSynthesis' in window) speechSynthesis.cancel(); });
+$('mus').addEventListener('click', e => { SND.music = !SND.music; e.currentTarget.setAttribute('aria-pressed', SND.music); if (SND.mus) SND.mus.gain.setTargetAtTime(SND.music ? 0.5 : 0, SND.ac.currentTime, 0.05); });
+$('voc').addEventListener('click', e => { SND.voice = !SND.voice; e.currentTarget.setAttribute('aria-pressed', SND.voice); if (!SND.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); });
+let tab = 0, ilT = 0;
+$('tabs').innerHTML = PROGRAMS.map((p, i) => `<button data-i="${i}" aria-pressed="${i === 0}">${p.name}</button>`).join('');
+$('tabs').addEventListener('click', e => { const i = e.target.dataset.i; if (i == null) return; tab = +i; [...$('tabs').children].forEach((b, j) => b.setAttribute('aria-pressed', j === tab)); ilT = 0; });
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+function ilDraw() {
+  if (!document.querySelector('details').open) return;
+  const now = performance.now(); if (now - ilT < 300) return; ilT = now;
+  const p = PROGRAMS[tab], st = new Map(p.ins.map(it => [it.li, it]));
+  $('il').innerHTML = p.lines.map((raw, li) => {
+    const s = raw.trim(); if (!s) return '';
+    if (s.startsWith('#') || s.startsWith('//')) return `<span class="c">${esc(raw)}</span>`;
+    const it = st.get(li); let html = esc(raw);
+    if (it && it.r) html = html.replace(esc(it.a[0]), `<span class="${it.r.get() ? 'on' : 'op'}">${esc(it.a[0])}</span>`);
+    return html;
+  }).join('\n');
+}
+function ui() {
+  if (phase === 'homing' && getB('M3040') && !getB('M3101')) phase = credits > 0 ? 'aim' : 'idle';
+  if (phase === 'idle' && credits > 0 && getB('M3040')) { phase = 'aim'; timeLeft = 20; }
+  $('cr').textContent = credits; $('win').textContent = wins;
+  $('tm').textContent = phase === 'aim' ? Math.ceil(timeLeft) : '-';
+  $('tbar').style.width = (phase === 'aim' ? timeLeft / 20 * 100 : 0) + '%'; $('tbar').classList.toggle('hurry', phase === 'aim' && timeLeft <= 5);
+  const gl = got.length ? '획득: ' + Object.entries(got.reduce((m, n) => (m[n] = (m[n] || 0) + 1, m), {})).map(([n, c]) => c > 1 ? `${n} ×${c}` : n).join(', ') : '아직 뽑은 게 없어요'; if ($('gotlist').textContent !== gl) $('gotlist').textContent = gl;
+  $('grab').disabled = phase !== 'aim';
+  $('hint').textContent = phase === 'homing' || phase === 'boot' ? '집게가 원점(출구 위)으로 가는 중…' : phase === 'run' ? '집게가 뽑는 중! (래더 자동 운전)' : phase === 'idle' ? '동전을 넣으세요' : '방향키·조이스틱으로 조준 · 스페이스 = 뽑기';
+  $('pos').textContent = `X ${AX[0].pos.toFixed(1)}  Y ${AX[1].pos.toFixed(1)}  Z ${AX[2].pos.toFixed(1)}`;
+  document.querySelectorAll('.lamp').forEach(l => l.classList.toggle('on', !!bitRef(l.dataset.d).get()));
+  $('steps').textContent = `자동 단계 D3170 = ${D[3170]} ${AUTO_T[D[3170]] || ''} · 점 D3160 = ${D[3160]} · 원점 단계 D3190 = ${D[3190]} · scan ${scans.toLocaleString()}`;
+  const on = Object.keys(ALM).filter(n => getB('M' + n));
+  $('al').textContent = on.length ? '알람: ' + on.map(n => `M${n} ${ALM[n]}`).join(', ') + ' → 원인을 없애고 에러 리셋' : '';
+  ilDraw();
+}
+build3d(); refill();
+setTimeout(() => { D[3164] = 1500; pulse('M3014', 200); phase = 'homing'; }, 400);
+requestAnimationFrame(t => { last = t; loop(t); });
+</script>
+
+</body>
+</html>

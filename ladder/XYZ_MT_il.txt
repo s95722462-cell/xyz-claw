@@ -1,0 +1,75 @@
+# [6/6] XYZ_MT : 모션 지령 블록 (축마다 같은 모양) — 자동·원점 프로그램은 "이동 요구" 비트와 기동 번호만 만든다
+# 축 X: 요구 M3200, 지령 냄 M3201, 기동 완료 M3202, 이동 끝 M3203, 기동 번호 D3180 → U6\G1500, 기동 Y70, 기동완료 X70, BUSY X6C, 위치결정완료 X74
+# 축 Y: M3220~3223, D3181 → U6\G1600, Y71, X71, X6D, X75
+# 축 Z: M3240~3243, D3182 → U6\G1700, Y72, X72, X6E, X76
+# XY 보간 이동은 기준축 X 만 기동(보간축 Y 는 QD75 가 같이 움직임) → X 블록의 끝 = XY 끝
+# 이동 끝 비트(M32x3)는 요구 쪽에서 읽고 RST 한다
+# 끝 판정 = 기동 확인 뒤 BUSY 꺼짐·축 에러 없음 (원점 복귀는 위치결정 완료 신호가 안 켜지므로 BUSY 로 봄)
+
+// 1. X 축: 요구·운전 가능·BUSY 아님·아직 안 냄 → 기동 번호 쓰고 기동
+LD M3200
+AND M3005
+ANI X6C
+ANI M3201
+MOV D3180 U6\G1500
+SET Y70
+SET M3201
+// 기동 완료 신호 → 기동 끄기, 기동 확인
+LD Y70
+AND X70
+RST Y70
+SET M3202
+// 위치결정 완료·BUSY 꺼짐 → 이동 끝
+LD M3202
+ANI X6C
+ANI X68
+SET M3203
+RST M3200
+RST M3201
+RST M3202
+
+// 2. Y 축
+LD M3220
+AND M3005
+ANI X6D
+ANI M3221
+MOV D3181 U6\G1600
+SET Y71
+SET M3221
+LD Y71
+AND X71
+RST Y71
+SET M3222
+LD M3222
+ANI X6D
+ANI X69
+SET M3223
+RST M3220
+RST M3221
+RST M3222
+
+// 3. Z 축
+LD M3240
+AND M3005
+ANI X6E
+ANI M3241
+MOV D3182 U6\G1700
+SET Y72
+SET M3241
+LD Y72
+AND X72
+RST Y72
+SET M3242
+LD M3242
+ANI X6E
+ANI X6A
+SET M3243
+RST M3240
+RST M3241
+RST M3242
+
+// 4. 정지되면 기동 신호도 끔
+LDI M3007
+RST Y70
+RST Y71
+RST Y72

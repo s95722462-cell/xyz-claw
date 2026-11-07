@@ -1,0 +1,562 @@
+<title>XYZ 갠트리 시뮬레이터</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 왼쪽 큰 3D 갠트리 + 오른쪽 GOT 조작반, 아래 점 목록·알람·래더 원문 */
+:root{
+  --bg:#eef1f2; --panel:#ffffff; --panel2:#f6f8f8; --ink:#16201f; --muted:#5d6b69; --line:#d3dbda;
+  --accent:#0f6e74; --accent-ink:#ffffff;
+  --ok:#1f9d55; --warn:#d98a00; --bad:#d43c2f; --off:#c9d1d0;
+  --cv-floor:#e3e9e8; --cv-grid:#c6d0cf; --cv-frame:#4c5b59; --cv-beam:#2d3a39; --cv-head:#0f6e74; --cv-trail:#d98a00; --cv-pt:#7b4fd1;
+  --f-ui:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1515; --panel:#172120; --panel2:#1c2827; --ink:#e3ecea; --muted:#93a4a1; --line:#2c3b39;
+  --accent:#3fb7b3; --accent-ink:#06201f; --ok:#36c272; --warn:#f0a72a; --bad:#ff6a5c; --off:#34423f;
+  --cv-floor:#1b2625; --cv-grid:#2b3a38; --cv-frame:#8aa09c; --cv-beam:#c4d3d0; --cv-head:#3fb7b3; --cv-trail:#f0a72a; --cv-pt:#b08cff;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1515; --panel:#172120; --panel2:#1c2827; --ink:#e3ecea; --muted:#93a4a1; --line:#2c3b39;
+  --accent:#3fb7b3; --accent-ink:#06201f; --ok:#36c272; --warn:#f0a72a; --bad:#ff6a5c; --off:#34423f;
+  --cv-floor:#1b2625; --cv-grid:#2b3a38; --cv-frame:#8aa09c; --cv-beam:#c4d3d0; --cv-head:#3fb7b3; --cv-trail:#f0a72a; --cv-pt:#b08cff;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45}
+.wrap{max-width:1320px;margin:0 auto;padding-block:16px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+h1{font-size:20px;margin:0;font-weight:700;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.tag{font-family:var(--f-num);font-size:11px;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.top{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px}
+@media (max-width:900px){.top{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;min-width:0}
+.card h2{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.stage{position:relative;padding:0;overflow:hidden;display:flex;min-height:440px}
+#cv{display:block;width:100%;height:100%;flex:1;min-height:440px;max-width:100%}
+.readout{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.ax{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;min-width:96px}
+.ax b{font-size:11px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;gap:6px}
+.ax span.v{font-family:var(--f-num);font-size:18px;font-variant-numeric:tabular-nums}
+.ax i{font-style:normal;font-size:10px;padding:0 4px;border-radius:3px;background:var(--off);color:var(--ink)}
+.ax i.on{background:var(--warn);color:#111}
+.ax i.err{background:var(--bad);color:#fff}
+.stepbar{position:absolute;left:10px;bottom:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px}
+.pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.pill b{font-family:var(--f-num);font-weight:600}
+.simctl{position:absolute;right:10px;top:10px;display:flex;gap:4px}
+.simctl button{font:12px var(--f-ui);border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:5px;padding:3px 8px;cursor:pointer}
+.simctl button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* 조작반 */
+.got{display:grid;gap:10px;align-content:start}
+.lamps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.lamp{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);min-width:0}
+.lamp::before{content:"";flex:none;width:10px;height:10px;border-radius:50%;background:var(--off)}
+.lamp.on::before{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+.lamp.red.on::before{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent)}
+.lamp.amb.on::before{background:var(--warn)}
+.mode{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.mode button{border:0;padding:8px;font:600 13px var(--f-ui);background:var(--panel2);color:var(--muted);cursor:pointer}
+.mode button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.b{border:1px solid var(--line);border-radius:6px;padding:10px 4px;font:600 13px var(--f-ui);background:var(--panel2);color:var(--ink);cursor:pointer;user-select:none;touch-action:none;min-height:44px}
+.b:active,.b.held{transform:translateY(1px);filter:brightness(.92)}
+.b.g{background:var(--ok);color:#fff;border-color:transparent}
+.b.r{background:var(--bad);color:#fff;border-color:transparent}
+.b.o{background:var(--warn);color:#111;border-color:transparent}
+.b.t[aria-pressed="true"]{outline:3px solid var(--bad);outline-offset:-3px}
+.b:focus-visible,.mode button:focus-visible,.simctl button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.jog{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 12px repeat(1,minmax(0,0.9fr));grid-template-rows:repeat(3,auto);gap:6px;align-items:stretch}
+.jog .b{padding:8px 2px;font-size:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row label{font-size:12px;color:var(--muted)}
+input[type=number]{font:13px var(--f-num);width:84px;padding:5px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);color:var(--ink);font-variant-numeric:tabular-nums}
+.safety{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.estop{background:var(--panel2);border:2px solid var(--bad);color:var(--bad)}
+.estop[aria-pressed="true"]{background:var(--bad);color:#fff}
+.warnline{font-size:12px;color:var(--bad);min-height:18px}
+/* 아래 */
+.bottom{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.bottom{grid-template-columns:minmax(0,1fr)}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11px}
+th:first-child,td:first-child{text-align:left}
+td input[type=number]{width:72px}
+tr.cur td{background:color-mix(in srgb,var(--warn) 18%,transparent)}
+tr.off td{opacity:.45}
+.settings{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}
+.settings label{display:grid;gap:2px;font-size:11px;color:var(--muted)}
+.alarms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.al{font-size:12px;padding:4px 8px;border-radius:5px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);display:flex;gap:6px;min-width:0}
+.al code{font-family:var(--f-num);font-size:11px}
+.al.on{background:color-mix(in srgb,var(--bad) 16%,var(--panel));color:var(--bad);border-color:var(--bad)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.tabs button{font:12px var(--f-num);border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:5px;padding:3px 8px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.il{font:12px/1.5 var(--f-num);max-height:340px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;white-space:pre}
+.il .c{color:var(--muted)}
+.il .on{color:var(--ok);font-weight:600}
+.il .op{color:var(--accent)}
+.note{font-size:12px;color:var(--muted);max-width:75ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>XYZ 갠트리 시뮬레이터</h1>
+    <span class="sub">학습 랙 XYZ 샘플 래더 7개(XYZ_SYS·ERR·HOME·MANU·AUTO·MT·GOT)를 그대로 실행 + 가짜 QD75MH4 3축</span>
+    <span class="tag" id="scaninfo">scan 0</span>
+  </header>
+
+  <div class="top">
+    <div class="card stage">
+      <canvas id="cv" width="1200" height="750" aria-label="XYZ 갠트리 3D 그림"></canvas>
+      <div class="readout" id="readout"></div>
+      <div class="simctl" role="group" aria-label="시뮬레이션 속도">
+        <button id="sp1" aria-pressed="true">x1</button><button id="sp2" aria-pressed="false">x2</button><button id="sp4" aria-pressed="false">x4</button>
+        <button id="clr">궤적 지우기</button>
+      </div>
+      <div class="stepbar">
+        <span class="pill">자동 단계 <b id="st_auto">0</b> <span id="st_auto_t">대기</span></span>
+        <span class="pill">원점 단계 <b id="st_home">0</b></span>
+        <span class="pill">점 <b id="st_pt">-</b></span>
+        <span class="pill">반복 <b id="st_rep">0/1</b></span>
+      </div>
+    </div>
+
+    <div class="card got" aria-label="GOT 조작반">
+      <h2>상태 (M 디바이스)</h2>
+      <div class="lamps" id="lamps"></div>
+      <h2>모드 · 운전 (M3016 · M3010~M3017)</h2>
+      <div class="mode" role="group" aria-label="운전 모드">
+        <button id="mManual" aria-pressed="true">수동</button><button id="mAuto" aria-pressed="false">자동</button>
+      </div>
+      <div class="btns">
+        <button class="b" data-mom="M3014">원점 복귀</button>
+        <button class="b g" data-mom="M3012">자동 시작</button>
+        <button class="b" data-mom="M3013">사이클 정지</button>
+        <button class="b r" data-mom="M3010">정지</button>
+        <button class="b o" data-mom="M3011">에러 리셋</button>
+        <button class="b t" id="servoOff" aria-pressed="false" data-alt="M3017">서보 OFF</button>
+      </div>
+      <h2>JOG (누르는 동안, 수동 모드)</h2>
+      <div class="jog">
+        <span></span><button class="b" data-mom="M3022" data-hold>Y+</button><span></span><span></span><button class="b" data-mom="M3025" data-hold>Z 위</button>
+        <button class="b" data-mom="M3021" data-hold>X−</button><span></span><button class="b" data-mom="M3020" data-hold>X+</button><span></span><span></span>
+        <span></span><button class="b" data-mom="M3023" data-hold>Y−</button><span></span><span></span><button class="b" data-mom="M3024" data-hold>Z 아래</button>
+      </div>
+      <div class="row"><label for="jogsp">JOG 속도 D3164 (mm/min)</label><input type="number" id="jogsp" min="1" max="3000" step="50"></div>
+      <div class="warnline" id="zwarn"></div>
+      <h2>안전 입력 (X0 · X1)</h2>
+      <div class="safety">
+        <button class="b estop" id="estop" aria-pressed="false">비상 정지</button>
+        <button class="b" id="door" aria-pressed="false">도어 열기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card">
+      <h2>점 목록 (GOT 10번 화면 · D3500~ mm)</h2>
+      <div class="tbl"><table id="pts"><thead><tr><th>점</th><th>X mm</th><th>Y mm</th><th>Z mm (아래 +)</th></tr></thead><tbody></tbody></table></div>
+      <div class="settings">
+        <label>점 개수 D3150<input type="number" id="s_n" min="1" max="8"></label>
+        <label>반복 횟수 D3161<input type="number" id="s_rep" min="1" max="99"></label>
+        <label>Z 안전 높이 mm D3550<input type="number" id="s_zs" step="1"></label>
+        <label>XY 속도 mm/min D3552<input type="number" id="s_vxy" step="100"></label>
+        <label>Z 속도 mm/min D3554<input type="number" id="s_vz" step="100"></label>
+        <label>머묾 x0.1초 D3158<input type="number" id="s_dw" min="0"></label>
+      </div>
+    </div>
+    <div class="card">
+      <h2>알람 (XYZ_ERR · M1400~)</h2>
+      <div class="alarms" id="alarms"></div>
+      <p class="note">스트로크 밖 점(예: X 300)을 넣고 자동을 돌리면 QD75 가 축 에러를 내고 알람이 켜집니다. 비상 정지·자동 중 도어 열기도 시험해 보세요.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>래더 원문 (실행 중 · 초록 = ON)</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="il" id="il"></div>
+    <p class="note">가짜 QD75MH4: 축1 X 0~220mm, 축2 Y 0~160mm, 축3 Z 0~60mm(위가 0), 속도 제한 6000mm/min, 가감속 0.3초, 원점 복귀(9001)는 0mm 로 2000mm/min, X No.10 식별자 0AH = X·Y 2축 직선 보간, 위치결정 완료 신호 0.3초. 실제 장비 값이 아니라 동작 확인용 가정입니다.</p>
+  </div>
+</div>
+
+<script>
+const PROGRAMS = /*PROGRAMS*/[];
+
+// ───────── 메모리 ─────────
+const D = new Int16Array(20000), G6 = new Int16Array(20000), Z = new Int16Array(16);
+const BIT = new Map();               // 'M3000' 'X60' 'Y70'
+const TIM = new Map();               // n → {acc, done}
+let firstScan = true;
+const fbuf = new DataView(new ArrayBuffer(4));
+const getB = k => BIT.get(k) || 0, setB = (k, v) => BIT.set(k, v ? 1 : 0);
+
+function xyKey(p, h) { return p + parseInt(h, 16).toString(16).toUpperCase(); }
+function arrOf(sp) { return sp === 'D' ? D : sp === 'U6' ? G6 : Z; }
+function wordLoc(tok) {
+  let m = tok.match(/^(D|U6\\G|Z)(\d+)(?:Z(\d+))?$/);
+  if (!m) return null;
+  const sp = m[1] === 'U6\\G' ? 'U6' : m[1];
+  const n = +m[2], z = m[3] !== undefined ? +m[3] : -1;
+  return { a: arrOf(sp), idx: () => n + (z >= 0 ? Z[z] : 0) };
+}
+function bitRef(tok) {
+  let m;
+  if ((m = tok.match(/^(.+)\.([0-9A-F])$/))) {
+    const w = wordLoc(m[1]), b = parseInt(m[2], 16);
+    return { get: () => (w.a[w.idx()] >> b) & 1, set: v => { const i = w.idx(); w.a[i] = v ? (w.a[i] | (1 << b)) : (w.a[i] & ~(1 << b)); } };
+  }
+  if ((m = tok.match(/^SM(\d+)$/))) { const n = +m[1]; return { get: () => n === 400 ? 1 : n === 402 ? (firstScan ? 1 : 0) : 0, set: () => {} }; }
+  if ((m = tok.match(/^([XY])([0-9A-F]+)$/))) { const k = xyKey(m[1], m[2]); return { get: () => getB(k), set: v => setB(k, v) }; }
+  if ((m = tok.match(/^T(\d+)$/))) { const n = +m[1]; return { get: () => (TIM.get(n) || {}).done ? 1 : 0, set: () => {} }; }
+  if ((m = tok.match(/^M(\d+)$/))) { const k = tok; return { get: () => getB(k), set: v => setB(k, v) }; }
+  throw new Error('bit? ' + tok);
+}
+function wordRef(tok) {
+  let m;
+  if ((m = tok.match(/^K(\d)([MXY])([0-9A-F]+)$/))) {          // K4M1400 같은 비트 묶음
+    const nb = +m[1] * 4, p = m[2], base = p === 'M' ? +m[3] : parseInt(m[3], 16);
+    const key = i => p === 'M' ? 'M' + (base + i) : p + (base + i).toString(16).toUpperCase();
+    const g = () => { let v = 0; for (let i = 0; i < nb; i++) v |= getB(key(i)) << i; return v | 0; };
+    return { g16: () => (g() << 16) >> 16, g32: g, s16: v => { for (let i = 0; i < nb; i++) setB(key(i), (v >> i) & 1); }, s32: v => { for (let i = 0; i < nb; i++) setB(key(i), (v >> i) & 1); } };
+  }
+  if ((m = tok.match(/^K(-?\d+)$/))) { const v = +m[1]; return { g16: () => v, g32: () => v, gf: () => v }; }
+  if ((m = tok.match(/^H([0-9A-F]+)$/))) { const v = parseInt(m[1], 16); return { g16: () => (v << 16) >> 16, g32: () => v | 0 }; }
+  if ((m = tok.match(/^E(-?[\d.]+)$/))) { const v = +m[1]; return { gf: () => v }; }
+  if ((m = tok.match(/^T(\d+)$/))) { const n = +m[1]; return { g16: () => Math.floor(((TIM.get(n) || {}).acc || 0) * 10) }; }
+  const w = wordLoc(tok); if (!w) throw new Error('word? ' + tok);
+  const A = w.a;
+  return {
+    g16: () => A[w.idx()],
+    s16: v => { A[w.idx()] = v; },
+    g32: () => { const i = w.idx(); return ((A[i + 1] << 16) | (A[i] & 0xFFFF)) | 0; },
+    s32: v => { const i = w.idx(); v |= 0; A[i] = v & 0xFFFF; A[i + 1] = v >> 16; },
+    gf: () => { const i = w.idx(); fbuf.setInt16(0, A[i], true); fbuf.setInt16(2, A[i + 1], true); return fbuf.getFloat32(0, true); },
+    sf: x => { const i = w.idx(); fbuf.setFloat32(0, x, true); A[i] = fbuf.getInt16(0, true); A[i + 1] = fbuf.getInt16(2, true); },
+  };
+}
+
+// ───────── 래더 해석기 ─────────
+const CMP = { '=': (a, b) => a === b, '<>': (a, b) => a !== b, '<': (a, b) => a < b, '>': (a, b) => a > b, '<=': (a, b) => a <= b, '>=': (a, b) => a >= b };
+function compile(p) {
+  const ins = [];
+  p.lines.forEach((raw, li) => {
+    const s = raw.trim();
+    if (!s || s.startsWith('#') || s.startsWith('//')) return;
+    const t = s.split(/\s+/), op = t[0], a = t.slice(1);
+    const it = { op, li, prev: 0, a };
+    let m;
+    if ((m = op.match(/^(LD|AND|OR)(D?)(<>|<=|>=|=|<|>)$/))) {
+      it.kind = 'cmp'; it.k = m[1]; it.f = CMP[m[3]]; const r1 = wordRef(a[0]), r2 = wordRef(a[1]);
+      it.g1 = m[2] ? r1.g32 : r1.g16; it.g2 = m[2] ? r2.g32 : r2.g16;
+    } else if (['LD', 'LDI', 'AND', 'ANI', 'OR', 'ORI', 'LDP', 'LDF'].includes(op)) { it.kind = 'bit'; it.r = bitRef(a[0]); }
+    else if (['OUT', 'OUTH'].includes(op) && /^T\d+$/.test(a[0])) { it.kind = 'tim'; it.n = +a[0].slice(1); it.sv = wordRef(a[1]).g16; it.unit = op === 'OUTH' ? 0.01 : 0.1; }
+    else if (['OUT', 'SET', 'RST', 'PLS'].includes(op)) { it.kind = 'out'; it.r = bitRef(a[0]); }
+    else { it.kind = 'fn'; it.refs = a.map(x => /^"/.test(x) ? x : (op === 'BKRST' && x === a[0]) ? x : wordRef(x)); }
+    ins.push(it);
+  });
+  p.ins = ins;
+}
+function runProg(p, dt) {
+  let acc = 1, st = [], ms = [], hasOut = false;
+  for (const it of p.ins) {
+    const op = it.op;
+    if (it.kind === 'cmp' || it.kind === 'bit') {
+      if (op.startsWith('LD')) { if (hasOut) { st = []; hasOut = false; } else st.push(acc); }
+      let v;
+      if (it.kind === 'cmp') v = it.f(it.g1(), it.g2()) ? 1 : 0;
+      else if (op === 'LDP') { const b = it.r.get(); v = b && !it.prev ? 1 : 0; it.prev = b; }
+      else if (op === 'LDF') { const b = it.r.get(); v = !b && it.prev ? 1 : 0; it.prev = b; }
+      else { v = it.r.get(); if (op.endsWith('I')) v ^= 1; }
+      if (op.startsWith('LD')) acc = v; else if (op.startsWith('AN')) acc &= v; else acc |= v;
+      continue;
+    }
+    if (op === 'ANB') { acc = st.pop() & acc; continue; }
+    if (op === 'ORB') { acc = st.pop() | acc; continue; }
+    if (op === 'MPS') { ms.push(acc); continue; }
+    if (op === 'MRD') { acc = ms[ms.length - 1]; continue; }
+    if (op === 'MPP') { acc = ms.pop(); continue; }
+    hasOut = true;
+    if (it.kind === 'tim') {
+      let t = TIM.get(it.n); if (!t) TIM.set(it.n, t = { acc: 0, done: 0 });
+      if (acc) { t.acc += dt; t.done = t.acc >= it.sv() * it.unit - 1e-9 ? 1 : 0; } else { t.acc = 0; t.done = 0; }
+      continue;
+    }
+    if (op === 'OUT') { it.r.set(acc); continue; }
+    if (op === 'PLS') { it.r.set(acc && !it.prev); it.prev = acc; continue; }
+    if (!acc) continue;
+    if (op === 'SET') { it.r.set(1); continue; }
+    if (op === 'RST') { it.r.set(0); continue; }
+    const r = it.refs;
+    switch (op) {
+      case 'MOV': r[1].s16(r[0].g16()); break;
+      case 'DMOV': r[1].s32(r[0].g32()); break;
+      case 'INC': r[0].s16(r[0].g16() + 1); break;
+      case '+': r[2].s16(r[0].g16() + r[1].g16()); break;
+      case '-': r[2].s16(r[0].g16() - r[1].g16()); break;
+      case '*': r[2].s32(r[0].g16() * r[1].g16()); break;
+      case 'D/': { const x = r[0].g32(), y = r[1].g32(), q = Math.trunc(x / y); r[2].s32(q); wordRef(it.a[2].replace(/\d+$/, n => +n + 2)).s32(x - q * y); break; }
+      case 'DFLT': r[1].sf(r[0].g32()); break;
+      case 'FLT': r[1].sf(r[0].g16()); break;
+      case 'E/': r[2].sf(Math.fround(r[0].gf() / r[1].gf())); break;
+      case 'E*': r[2].sf(Math.fround(r[0].gf() * r[1].gf())); break;
+      case 'DINT': r[1].s32(Math.round(r[0].gf())); break;
+      case 'BKRST': { const base = +it.a[0].slice(1), n = r[1].g16(); for (let i = 0; i < n; i++) setB('M' + (base + i), 0); break; }
+      default: throw new Error(p.name + ': 모르는 명령 ' + op);
+    }
+  }
+}
+PROGRAMS.forEach(compile);
+
+// ───────── 가짜 QD75MH4 (축1 X, 축2 Y, 축3 Z) ─────────
+const VLIM = 6000, ACC_T = 0.3, HOME_V = 2000;
+const STROKE = [[0, 220], [0, 160], [0, 60]];
+const BUF = [{ pos: 800, err: 806, cmd: 1500, rst: 1502, jog: 1518, data: 2000 }, { pos: 900, err: 906, cmd: 1600, rst: 1602, jog: 1618, data: 8000 }, { pos: 1000, err: 1006, cmd: 1700, rst: 1702, jog: 1718, data: 14000 }];
+const AX = [0, 1, 2].map(i => ({ i, pos: [87.3, 63.1, 22.4][i], v: 0, mode: null, err: 0, x7: 0, x74: -1, prevY7: 0, prevJ: 0, tgt: 0, vcmd: 0, stopping: false }));
+let interp = null;   // {xa, ya, x0,y0,x1,y1, L, s, v, vcmd}
+const g32 = n => ((G6[n + 1] << 16) | (G6[n] & 0xFFFF)) | 0;
+const A = VLIM / 60 / ACC_T;  // mm/s^2
+function moveScalar(cur, v, tgt, vmax, dt) {          // 사다리꼴: 반환 [pos, v, done]
+  const d = tgt - cur, dir = Math.sign(d) || 1;
+  const vstop = Math.sqrt(2 * A * Math.abs(d));
+  const want = dir * Math.min(vmax, vstop);
+  v = want > v ? Math.min(want, v + A * dt) : Math.max(want, v - A * dt);
+  let np = cur + v * dt;
+  if ((tgt - np) * d <= 0 || Math.abs(d) < 1e-4) return [tgt, 0, true];
+  return [np, v, false];
+}
+function qd75(dt) {
+  const y60 = getB('Y60'), srv = getB('Y61');
+  AX.forEach(ax => {
+    const b = BUF[ax.i];
+    if (G6[b.rst] === 1) ax.err = 0;
+    const yStop = getB('Y' + (0x64 + ax.i).toString(16).toUpperCase());
+    const y7 = getB('Y' + (0x70 + ax.i).toString(16).toUpperCase());
+    const jp = getB('Y' + (0x68 + 2 * ax.i).toString(16).toUpperCase()), jm = getB('Y' + (0x69 + 2 * ax.i).toString(16).toUpperCase());
+    if (!srv) { ax.mode = null; ax.v = 0; if (interp && (interp.xa === ax || interp.ya === ax)) interp = null; }
+    if ((yStop || ax.err) && ax.mode) ax.stopping = true;
+    // 기동
+    if (y7 && !ax.prevY7 && y60 && srv && !ax.mode && !ax.err && !yStop) {
+      const n = G6[b.cmd];
+      ax.x74 = -1;
+      if (n === 9001) { ax.mode = 'home'; ax.tgt = 0; ax.vcmd = HOME_V / 60; ax.stopping = false; ax.x7 = 1; }
+      else if (n >= 1 && n <= 600) {
+        const base = b.data + (n - 1) * 10, id = G6[base] & 0xFFFF, ctl = id >> 8;
+        const tgt = g32(base + 6) / 10000, vc = Math.min(g32(base + 4) / 100, VLIM) / 60;
+        if (ctl === 0x0A) {
+          const ya = AX[1], ty = g32(BUF[1].data + (n - 1) * 10 + 6) / 10000;
+          if (tgt < STROKE[0][0] || tgt > STROKE[0][1]) ax.err = 504;
+          else if (ty < STROKE[1][0] || ty > STROKE[1][1]) ax.err = 504;
+          else if (ya.mode || ya.err) ax.err = 200;
+          else {
+            const L = Math.hypot(tgt - ax.pos, ty - ya.pos);
+            interp = { xa: ax, ya, x0: ax.pos, y0: ya.pos, x1: tgt, y1: ty, L, s: 0, v: 0, vcmd: vc };
+            ax.mode = 'interp'; ya.mode = 'slave'; ax.stopping = ya.stopping = false; ax.x7 = 1;
+          }
+        } else {
+          if (tgt < STROKE[ax.i][0] || tgt > STROKE[ax.i][1]) ax.err = 504;
+          else { ax.mode = 'pos'; ax.tgt = tgt; ax.vcmd = vc; ax.stopping = false; ax.x7 = 1; }
+        }
+      } else ax.err = 543;
+    }
+    if (!y7) ax.x7 = 0;
+    ax.prevY7 = y7;
+    // JOG
+    const jd = jp && !jm ? 1 : jm && !jp ? -1 : 0;
+    if (jd && !ax.mode && y60 && srv && !ax.err && !yStop && !(ax.jlim === jd)) { ax.mode = 'jog'; ax.jd = jd; ax.stopping = false; ax.vcmd = Math.min(g32(b.jog) / 100, VLIM) / 60; }
+    if (ax.mode === 'jog' && !jd) ax.stopping = true;
+    ax.prevJ = jd; if (!jd || jd !== ax.jlim) ax.jlim = 0;
+  });
+  // 운동
+  if (interp) {
+    const ip = interp, xa = ip.xa, ya = ip.ya;
+    if (xa.stopping || ya.stopping || xa.err || ya.err) { ip.v = Math.max(0, ip.v - A * dt); if (ip.v === 0) { xa.mode = ya.mode = null; interp = null; } }
+    else { const r = moveScalar(ip.s, ip.v, ip.L, ip.vcmd, dt); ip.s = r[0]; ip.v = r[1]; if (r[2]) { xa.mode = ya.mode = null; interp = null; xa.x74 = 0; ya.x74 = 0; } }
+    if (ip.L > 0) { xa.pos = ip.x0 + (ip.x1 - ip.x0) * ip.s / ip.L; ya.pos = ip.y0 + (ip.y1 - ip.y0) * ip.s / ip.L; }
+    xa.v = ya.v = ip.v;
+  }
+  AX.forEach(ax => {
+    if (ax.mode === 'pos' || ax.mode === 'home') {
+      if (ax.stopping) { const s = Math.sign(ax.v); ax.v = s * Math.max(0, Math.abs(ax.v) - A * dt); ax.pos += ax.v * dt; if (ax.v === 0) ax.mode = null; }
+      else { const r = moveScalar(ax.pos, ax.v, ax.tgt, ax.vcmd, dt); ax.pos = r[0]; ax.v = r[1]; if (r[2]) { if (ax.mode === 'pos') ax.x74 = 0; ax.mode = null; } }
+    } else if (ax.mode === 'jog') {
+      const want = ax.stopping ? 0 : ax.jd * ax.vcmd;
+      ax.v = want > ax.v ? Math.min(want, ax.v + A * dt) : Math.max(want, ax.v - A * dt);
+      ax.pos += ax.v * dt;
+      const [lo, hi] = STROKE[ax.i];
+      if (ax.pos < lo || ax.pos > hi) { ax.pos = Math.min(hi, Math.max(lo, ax.pos)); ax.v = 0; ax.mode = null; ax.err = 508; ax.jlim = ax.jd; }
+      if (ax.stopping && ax.v === 0) ax.mode = null;
+    }
+    if (ax.x74 >= 0) { ax.x74 += dt; if (ax.x74 > 0.3) ax.x74 = -1; }
+    const b = BUF[ax.i], h = n => (n).toString(16).toUpperCase();
+    setB('X' + h(0x68 + ax.i), ax.err); setB('X' + h(0x6C + ax.i), !!ax.mode);
+    setB('X' + h(0x70 + ax.i), ax.x7); setB('X' + h(0x74 + ax.i), ax.x74 >= 0);
+    const p = Math.round(ax.pos * 10000); G6[b.pos] = p & 0xFFFF; G6[b.pos + 1] = p >> 16; G6[b.err] = ax.err;
+  });
+  setB('X60', y60); setB('X61', y60);
+}
+
+// ───────── 실행 루프 ─────────
+const DT = 0.004;
+let speed = 1, scans = 0, last = performance.now();
+setB('X0', 1); setB('X1', 1);
+const trail = [];
+function step() {
+  for (const p of PROGRAMS) runProg(p, DT);
+  firstScan = false; qd75(DT); scans++;
+}
+function loop(now) {
+  let el = Math.min(0.1, (now - last) / 1000); last = now;
+  let n = Math.round(el * speed / DT);
+  try { for (let i = 0; i < n; i++) step(); } catch (e) { document.getElementById('scaninfo').textContent = '오류: ' + e.message; throw e; }
+  const tip = [AX[0].pos, AX[1].pos, AX[2].pos];
+  const lt = trail[trail.length - 1];
+  if (!lt || Math.hypot(lt[0] - tip[0], lt[1] - tip[1], lt[2] - tip[2]) > 0.6) { trail.push(tip); if (trail.length > 900) trail.shift(); }
+  draw(); ui();
+  requestAnimationFrame(loop);
+}
+
+// ───────── 3D 그림 ─────────
+const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+let css = {};
+function readCss() { const s = getComputedStyle(document.documentElement); ['--cv-floor', '--cv-grid', '--cv-frame', '--cv-beam', '--cv-head', '--cv-trail', '--cv-pt', '--ink', '--muted', '--bad', '--panel'].forEach(k => css[k] = s.getPropertyValue(k).trim()); }
+readCss(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readCss);
+new MutationObserver(readCss).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+function fit() { const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
+addEventListener('resize', fit); new ResizeObserver(fit).observe(cv);
+const H = 90;   // 들보 높이 (바닥에서 mm)
+function P(x, y, h) {   // 월드(mm) → 화면. h = 바닥에서 높이
+  const W = cv.width, s = Math.min(W / 560, cv.height / 380), c = 0.866, sn = 0.5;
+  const ox = W * 0.5, oy = cv.height * 0.62;
+  return [ox + (x - 110) * c * s - (y - 80) * c * s, oy + (x - 110) * sn * s + (y - 80) * sn * s - h * s * 1.05];
+}
+const zH = z => H - 12 - z;   // Z(위 0, 아래 +) → 공구 끝 높이
+function line(pts, col, w, dash) { cx.beginPath(); pts.forEach((p, i) => i ? cx.lineTo(...p) : cx.moveTo(...p)); cx.strokeStyle = col; cx.lineWidth = w; cx.setLineDash(dash || []); cx.stroke(); cx.setLineDash([]); }
+function poly(pts, fill, stroke) { cx.beginPath(); pts.forEach((p, i) => i ? cx.lineTo(...p) : cx.moveTo(...p)); cx.closePath(); if (fill) { cx.fillStyle = fill; cx.fill(); } if (stroke) { cx.strokeStyle = stroke; cx.lineWidth = 1; cx.stroke(); } }
+function draw() {
+  const W = cv.width, s = Math.min(W / 560, cv.height / 380);
+  cx.clearRect(0, 0, W, cv.height);
+  // 바닥판 + 격자 (10mm)
+  const [X0, X1] = [-15, 235], [Y0, Y1] = [-15, 175];
+  poly([P(X0, Y0, 0), P(X1, Y0, 0), P(X1, Y1, 0), P(X0, Y1, 0)], css['--cv-floor'], css['--cv-grid']);
+  for (let x = 0; x <= 220; x += 20) line([P(x, 0, 0), P(x, 160, 0)], css['--cv-grid'], 1);
+  for (let y = 0; y <= 160; y += 20) line([P(0, y, 0), P(220, y, 0)], css['--cv-grid'], 1);
+  cx.fillStyle = css['--muted']; cx.font = `${Math.round(11 * s / 1.6)}px "JetBrains Mono",monospace`;
+  for (let x = 0; x <= 220; x += 50) cx.fillText(x, ...P(x, -12, 0));
+  for (let y = 0; y <= 160; y += 40) cx.fillText(y, ...P(-14, y, 0));
+  cx.fillText('X', ...P(232, -8, 0)); cx.fillText('Y', ...P(-12, 172, 0));
+  // 점 목록 (바닥 투영 + 목표 깊이)
+  const n = Math.max(1, Math.min(8, D[3150]));
+  const pts = [];
+  for (let k = 0; k < n; k++) { const b = 3100 + 6 * k; pts.push([((D[b + 1] << 16) | (D[b] & 0xFFFF)) / 10000, ((D[b + 3] << 16) | (D[b + 2] & 0xFFFF)) / 10000, ((D[b + 5] << 16) | (D[b + 4] & 0xFFFF)) / 10000]); }
+  line(pts.concat([pts[0]]).map(p => P(p[0], p[1], 0)), css['--cv-pt'], 1, [4, 4]);
+  pts.forEach((p, k) => {
+    const g = P(p[0], p[1], 0), t = P(p[0], p[1], zH(p[2]));
+    line([g, t], css['--cv-pt'], 1, [2, 3]);
+    cx.beginPath(); cx.arc(...t, 4 * s / 1.6, 0, 7); cx.fillStyle = css['--cv-pt']; cx.fill();
+    cx.fillStyle = css['--cv-pt']; cx.fillText('P' + (k + 1), g[0] + 6, g[1] + 4);
+  });
+  // 궤적
+  if (trail.length > 1) {
+    line(trail.map(p => P(p[0], p[1], zH(p[2]))), css['--cv-trail'], 2);
+    line(trail.map(p => P(p[0], p[1], 0)), css['--cv-trail'] + '55', 1);
+  }
+  const x = AX[0].pos, y = AX[1].pos, z = AX[2].pos;
+  // 기둥·Y 레일 (양쪽)
+  for (const xs of [-12, 232]) {
+    line([P(xs, -10, 0), P(xs, -10, H)], css['--cv-frame'], 3); line([P(xs, 170, 0), P(xs, 170, H)], css['--cv-frame'], 3);
+    line([P(xs, -10, H), P(xs, 170, H)], css['--cv-frame'], 4);
+  }
+  // X 들보 (Y 위치에서)
+  poly([P(-12, y - 5, H + 4), P(232, y - 5, H + 4), P(232, y + 5, H + 4), P(-12, y + 5, H + 4)], css['--cv-beam'], null);
+  poly([P(-12, y + 5, H + 4), P(232, y + 5, H + 4), P(232, y + 5, H - 4), P(-12, y + 5, H - 4)], css['--cv-frame'], null);
+  // 캐리지 + Z 축
+  poly([P(x - 9, y - 9, H + 9), P(x + 9, y - 9, H + 9), P(x + 9, y + 9, H + 9), P(x - 9, y + 9, H + 9)], css['--cv-head'], css['--cv-beam']);
+  const top = P(x, y + 7, H + 6), tip = P(x, y, zH(z));
+  line([P(x, y, H), tip], css['--cv-head'], 7 * s / 1.6);
+  cx.beginPath(); cx.arc(...tip, 5 * s / 1.6, 0, 7); cx.fillStyle = css['--bad']; cx.fill();
+  // 바닥 그림자·수직 보조선
+  const sh = P(x, y, 0); line([tip, sh], css['--muted'], 1, [3, 3]);
+  cx.beginPath(); cx.ellipse(sh[0], sh[1], 8 * s / 1.6, 4 * s / 1.6, 0, 0, 7); cx.fillStyle = css['--ink'] + '33'; cx.fill();
+  // Z 안전 높이 면 표시 (축 옆)
+  const zs = ((D[3153] << 16) | (D[3152] & 0xFFFF)) / 10000;
+  line([P(232, -10, zH(zs)), P(232, 170, zH(zs))], css['--muted'], 1, [6, 4]);
+  cx.fillStyle = css['--muted']; cx.fillText('Z 안전 높이 ' + zs.toFixed(0) + 'mm', ...P(236, 170, zH(zs)));
+}
+
+// ───────── 화면 (GOT 대신) ─────────
+const $ = id => document.getElementById(id);
+const LAMPS = [['M3005', '운전 가능'], ['Y61', '서보 ON'], ['M3040', '원점 완료'], ['M3101', '원점 복귀 중', 'amb'], ['M3064', '수동 가능'], ['M3060', '자동 운전 중'], ['M3062', '사이클 정지 중', 'amb'], ['M3071', 'Z 내려감 경고', 'red'], ['M3075', '중알람', 'red']];
+$('lamps').innerHTML = LAMPS.map(([d, t, c]) => `<div class="lamp ${c || ''}" data-d="${d}" title="${d}">${t}</div>`).join('');
+const ALM = [[1400, 'X축 서보 에러'], [1401, 'Y축 서보 에러'], [1402, 'Z축 서보 에러'], [1403, '비상 정지'], [1404, '자동 중 도어 열림'], [1410, 'X 기동 무응답'], [1411, 'Y 기동 무응답'], [1412, 'Z 기동 무응답'], [1420, 'X(XY) 이동 시간 초과'], [1421, 'Y 이동 시간 초과'], [1422, 'Z 이동 시간 초과'], [1423, '원점 복귀 시간 초과']];
+$('alarms').innerHTML = ALM.map(([n, t]) => `<div class="al" data-d="M${n}"><code>M${n}</code>${t}</div>`).join('');
+const AUTO_T = { 0: '대기', 10: 'Z 안전 높이로', 11: 'Z 올라가는 중', 20: 'XY 보간 지령', 21: 'XY 이동 중', 30: 'Z 내림 지령', 31: 'Z 내려가는 중', 40: '머묾', 50: 'Z 올림 지령', 51: 'Z 올라가는 중', 60: '다음 점' };
+const AXN = ['X', 'Y', 'Z'];
+$('readout').innerHTML = AXN.map((n, i) => `<div class="ax"><b>${n}축 <span><i id="bz${i}">BUSY</i> <i id="er${i}">ERR</i></span></b><span class="v" id="p${i}">0.00</span></div>`).join('');
+const fD = n => { fbuf.setInt16(0, D[n], true); fbuf.setInt16(2, D[n + 1], true); return fbuf.getFloat32(0, true); };
+const sD = (n, x) => { fbuf.setFloat32(0, x, true); D[n] = fbuf.getInt16(0, true); D[n + 1] = fbuf.getInt16(2, true); };
+// 점 목록
+const tb = document.querySelector('#pts tbody');
+tb.innerHTML = Array.from({ length: 8 }, (_, k) => `<tr data-k="${k}"><td>P${k + 1}</td>` + [0, 2, 4].map(o => `<td><input type="number" step="1" id="pt${k}_${o}" data-f="${3500 + 6 * k + o}"></td>`).join('') + '</tr>').join('');
+tb.addEventListener('change', e => { const f = e.target.dataset.f; if (f) sD(+f, +e.target.value); });
+const SET = [['s_n', 3150, 'i'], ['s_rep', 3161, 'i'], ['s_zs', 3550, 'f'], ['s_vxy', 3552, 'i'], ['s_vz', 3554, 'i'], ['s_dw', 3158, 'i'], ['jogsp', 3164, 'i']];
+SET.forEach(([id, n, t]) => $(id).addEventListener('change', e => { const v = +e.target.value; if (t === 'f') sD(n, v); else D[n] = v; }));
+function fill(el, v, dec) { if (document.activeElement !== el) el.value = dec == null ? v : (+v).toFixed(dec); }
+// 버튼
+document.querySelectorAll('[data-mom]').forEach(b => {
+  const d = b.dataset.mom; let t0 = 0;
+  const on = e => { e.preventDefault(); setB(d, 1); t0 = performance.now(); b.classList.add('held'); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
+  const off = () => { if (!getB(d)) return; const left = 150 - (performance.now() - t0); b.classList.remove('held'); setTimeout(() => setB(d, 0), Math.max(0, left)); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+  b.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { setB(d, 1); t0 = performance.now(); } });
+  b.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') off(); });
+});
+$('servoOff').addEventListener('click', e => { const v = !getB('M3017'); setB('M3017', v); e.currentTarget.setAttribute('aria-pressed', v); });
+$('mManual').addEventListener('click', () => setB('M3016', 0));
+$('mAuto').addEventListener('click', () => setB('M3016', 1));
+$('estop').addEventListener('click', e => { const pressed = getB('X0'); setB('X0', !pressed); e.currentTarget.setAttribute('aria-pressed', pressed ? 'true' : 'false'); e.currentTarget.textContent = pressed ? '비상 정지 (눌림 · 다시 눌러 해제)' : '비상 정지'; });
+$('door').addEventListener('click', e => { const closed = getB('X1'); setB('X1', !closed); e.currentTarget.setAttribute('aria-pressed', closed ? 'true' : 'false'); e.currentTarget.textContent = closed ? '도어 닫기 (지금 열림)' : '도어 열기'; });
+[1, 2, 4].forEach(k => $('sp' + k).addEventListener('click', () => { speed = k; [1, 2, 4].forEach(j => $('sp' + j).setAttribute('aria-pressed', j === k)); }));
+$('clr').addEventListener('click', () => trail.length = 0);
+// 래더 원문
+let tab = 0;
+$('tabs').innerHTML = PROGRAMS.map((p, i) => `<button data-i="${i}" aria-pressed="${i === 0}">${p.name}</button>`).join('');
+$('tabs').addEventListener('click', e => { const i = e.target.dataset.i; if (i == null) return; tab = +i; [...$('tabs').children].forEach((b, j) => b.setAttribute('aria-pressed', j === tab)); ilDraw(true); });
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+let ilT = 0;
+function ilDraw(force) {
+  const now = performance.now(); if (!force && now - ilT < 250) return; ilT = now;
+  const p = PROGRAMS[tab], st = new Map(p.ins.map(it => [it.li, it]));
+  $('il').innerHTML = p.lines.map((raw, li) => {
+    const s = raw.trim(); if (!s) return '';
+    if (s.startsWith('#') || s.startsWith('//')) return `<span class="c">${esc(raw)}</span>`;
+    const it = st.get(li); let html = esc(raw);
+    if (it && it.r) { const on = it.r.get(); html = html.replace(esc(it.a[0]), `<span class="${on ? 'on' : 'op'}">${esc(it.a[0])}</span>`); }
+    return html;
+  }).join('\n');
+}
+function ui() {
+  $('scaninfo').textContent = `scan ${scans.toLocaleString()} · 4ms · x${speed}`;
+  document.querySelectorAll('.lamp').forEach(l => l.classList.toggle('on', !!bitRef(l.dataset.d).get()));
+  document.querySelectorAll('.al').forEach(l => l.classList.toggle('on', !!getB(l.dataset.d)));
+  [3400, 3402, 3404].forEach((n, i) => { $('p' + i).textContent = fD(n).toFixed(2); $('bz' + i).classList.toggle('on', !!getB('X' + (0x6C + i).toString(16).toUpperCase())); $('er' + i).classList.toggle('err', !!getB('X' + (0x68 + i).toString(16).toUpperCase())); $('er' + i).textContent = D[3006 + i] ? 'ERR ' + D[3006 + i] : 'ERR'; });
+  const sa = D[3170]; $('st_auto').textContent = sa; $('st_auto_t').textContent = AUTO_T[sa] || '';
+  $('st_home').textContent = D[3190]; $('st_pt').textContent = getB('M3060') ? `P${D[3160]} / ${D[3150]}` : '-'; $('st_rep').textContent = `${D[3162]}/${D[3161]}`;
+  $('mManual').setAttribute('aria-pressed', !getB('M3016')); $('mAuto').setAttribute('aria-pressed', !!getB('M3016'));
+  $('zwarn').textContent = getB('M3075') ? '중알람으로 전체 정지 중입니다 (M3075). 아래 알람 원인을 없애고 에러 리셋을 누르세요.'
+    : !getB('Y61') ? '서보 OFF 상태입니다. 비상 정지·서보 OFF 버튼을 확인하세요.'
+    : getB('M3071') ? 'Z 가 안전 높이 아래라 X·Y JOG 가 막혔습니다 (M3071). Z 위로 올리세요.'
+    : (getB('M3016') && !getB('M3060') && !getB('M3040')) ? '자동 시작 전에 수동 모드에서 원점 복귀가 필요합니다.' : '';
+  for (let k = 0; k < 8; k++) { [0, 2, 4].forEach(o => fill($(`pt${k}_${o}`), fD(3500 + 6 * k + o), 1)); const tr = tb.children[k]; tr.classList.toggle('off', k >= D[3150]); tr.classList.toggle('cur', getB('M3060') && k === D[3160] - 1); }
+  SET.forEach(([id, n, t]) => fill($(id), t === 'f' ? fD(n) : D[n], t === 'f' ? 1 : null));
+  ilDraw();
+}
+fit(); requestAnimationFrame(t => { last = t; loop(t); });
+</script>

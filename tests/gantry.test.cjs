@@ -1,0 +1,22 @@
+const { chromium } = require('playwright');
+const fs = require('fs');
+(async () => {
+  const b = await chromium.launch(); const pg = await b.newPage({ viewport: { width: 1300, height: 1000 } });
+  const errs = []; pg.on('pageerror', e => errs.push(String(e))); pg.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
+  await pg.goto('file:///' + require('path').resolve(process.argv[2] || 'gantry.html').split(String.fromCharCode(92)).join('/'));
+  const st = async tag => console.log(tag, JSON.stringify(await pg.evaluate(() => ({ pos: [0, 1, 2].map(i => document.getElementById('p' + i).textContent), lamps: [...document.querySelectorAll('.lamp.on')].map(l => l.textContent), al: [...document.querySelectorAll('.al.on')].map(l => l.textContent), auto: document.getElementById('st_auto').textContent + ' ' + document.getElementById('st_auto_t').textContent, pt: document.getElementById('st_pt').textContent, rep: document.getElementById('st_rep').textContent, scan: document.getElementById('scaninfo').textContent }))));
+  const press = async (sel, ms = 200) => { const el = pg.locator(sel); await el.dispatchEvent('pointerdown'); await pg.waitForTimeout(ms); await el.dispatchEvent('pointerup'); };
+  await pg.waitForTimeout(1000); await st('시작');
+  await pg.click('#sp4');
+  await press('[data-mom="M3014"]'); await pg.waitForTimeout(3000); await st('원점 3초 x4');
+  await press('[data-mom="M3020"]', 1500); await pg.waitForTimeout(500); await st('JOG X+');
+  await pg.click('#mAuto'); await pg.waitForTimeout(300);
+  await press('[data-mom="M3012"]'); await pg.waitForTimeout(4000); await st('자동 4초');
+  await pg.waitForTimeout(8000); await st('자동 12초');
+  await pg.screenshot({ path: 'shot_auto.png' });
+  await press('[data-mom="M3013"]'); await pg.waitForTimeout(10000); await st('사이클 정지 후');
+  await pg.click('#estop'); await pg.waitForTimeout(500); await st('비상 정지');
+  await pg.click('#estop'); await press('[data-mom="M3011"]'); await pg.waitForTimeout(800); await st('해제+리셋');
+  console.log('errors', errs.slice(0, 5));
+  await b.close();
+})();
