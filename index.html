@@ -479,7 +479,7 @@ function build3d() {
   if (!window.THREE) { view.innerHTML = '<div class="err3d">3D 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.</div>'; return; }
   const T = THREE;
   const renderer = new T.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+  renderer.setPixelRatio(Math.min(matchMedia('(pointer: coarse)').matches ? 1.5 : 2, devicePixelRatio || 1));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   view.appendChild(renderer.domElement);
@@ -804,7 +804,7 @@ function render(dt) {
   lastZ = z;
 }
 function loop(now) {
-  const el = Math.min(0.1, (now - last) / 1000); last = now;
+  const el = Math.min(0.5, (now - last) / 1000); last = now;   // 화면이 느려도 래더·축은 실제 시간대로
   const n = Math.round(el / DT);
   try { for (let i = 0; i < n; i++) step(); } catch (e) { toast('래더 오류: ' + e.message); throw e; }
   guard(el); game(el); render(el); ui();
@@ -866,7 +866,7 @@ function ui() {
   $('pos').textContent = `X ${AX[0].pos.toFixed(1)}  Y ${AX[1].pos.toFixed(1)}  Z ${AX[2].pos.toFixed(1)}`;
 }
 build3d(); refill();
-setTimeout(() => { D[3164] = 1500; pulse('M3014', 200); phase = 'homing'; }, 400);
+setTimeout(() => { D[3164] = 3000; pulse('M3014', 200); phase = 'homing'; }, 400);
 requestAnimationFrame(t => { last = t; loop(t); });
 </script>
 
