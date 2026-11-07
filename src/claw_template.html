@@ -486,7 +486,7 @@ function setPoints() {
   const x = AX[0].pos, y = AX[1].pos;
   const P2 = [[x, y, grabDepth(x, y)], [17, 17, 5]];
   P2.forEach((p, k) => p.forEach((v, j) => sD(3500 + 6 * k + 2 * j, v)));
-  D[3150] = 2; D[3161] = 1; D[3158] = 6; sD(3550, 8); D[3552] = 4000; D[3554] = 2400;
+  D[3150] = 2; D[3161] = 1; D[3158] = 6; sD(3550, 10); D[3552] = 4000; D[3554] = 2400;
 }
 function startGrab(auto) {
   if (phase !== 'aim') return;
@@ -623,6 +623,9 @@ function guard(dt) {
   [['M3020', 0, 1], ['M3021', 0, -1], ['M3022', 1, 1], ['M3023', 1, -1]].forEach(([d, ax, dir]) => {
     if (!getB(d)) return; const p = AX[ax].pos; if ((dir > 0 && p >= SOFT[ax][1]) || (dir < 0 && p <= SOFT[ax][0])) setB(d, 0);
   });
+  // 집게가 안전 높이(D3152)보다 아래에 남으면 래더 인터락(M3070)이 X·Y JOG 를 막음 → 조준 중이면 Z 를 자동으로 올림
+  const zUp = phase === 'aim' && !getB('M3070') && !getB('M3060');
+  if (zUp) { setB('M3025', 1); guard.z = true; } else if (guard.z) { setB('M3025', 0); guard.z = false; }
   healT -= dt;
   if (getB('M3075') && healT <= 0) { healT = 0.6; pulse('M3011', 200); if (phase === 'run') { setB('M3016', 0); phase = 'heal'; } }
   if (phase === 'heal' && !getB('M3075') && healT <= 0) { phase = 'homing'; pulse('M3014', 200); }
